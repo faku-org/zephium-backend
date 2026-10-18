@@ -20,3 +20,6 @@ skills-lock.json
 
 # Operator-owned staging policy beside Compose, not the public template.
 /deploy/zephium-staging-policy.json
+
+# Operator-owned production policy, never checked in with deployment settings.
+/deploy/zephium-production-policy.json

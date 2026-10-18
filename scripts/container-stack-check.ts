@@ -178,6 +178,69 @@ try {
     throw new Error("Private Compose env fixture permissions are too broad");
 
   await checked("Compose interpolation", comp(["config", "--quiet"]), 20);
+
+  // Production must support deliberate open enrollment without weakening staging's guard.
+  const productionEnvFile = join(directory, "production.env");
+  const productionValues = new Map(values);
+  productionValues.set("ZEPHIUM_PROXY_NETWORK", "ci-production-private-proxy");
+  productionValues.set("OPERATIONS_WEBHOOK", "https://alerts.example.test/ci");
+  productionValues.set("BILLING_RETURN_URL", "https://example.test/billing/return");
+  productionValues.set("BILLING_SUCCESS_URL", "https://example.test/billing/return");
+  productionValues.set("SIGNUP_EMAIL_ALLOWLIST", "");
+  await writeFile(
+    productionEnvFile,
+    `${[...productionValues].map(([key, value]) => `${key}=${value}`).join("\n")}\n`,
+    { mode: 0o600 },
+  );
+  const rendered = JSON.parse(
+    await checked(
+      "Production Compose interpolation",
+      [
+        "docker",
+        "compose",
+        "--env-file",
+        productionEnvFile,
+        "-f",
+        "deploy/compose.production.yaml",
+        "config",
+        "--format",
+        "json",
+      ],
+      20,
+    ),
+  );
+  if (
+    rendered.services.api.environment.POLAR_ENVIRONMENT !== "production" ||
+    rendered.services.api.environment.SIGNUP_EMAIL_ALLOWLIST !== "" ||
+    rendered.services.api.environment.SIGNUP_OPEN !== "false" ||
+    rendered.services.postgres.command.includes("archive_mode=off") ||
+    !rendered.services.postgres.volumes.some(
+      (v: { target: string; read_only: boolean }) =>
+        v.target === "/etc/pgbackrest/pgbackrest.conf" && v.read_only,
+    ) ||
+    "ZEPHIUM_MIGRATOR_PASSWORD" in rendered.services.api.environment ||
+    "POSTGRES_PASSWORD" in rendered.services.api.environment
+  )
+    throw new Error("Production deployment isolation or backup configuration invalid");
+  const restricted = await processResult(
+    [
+      "docker",
+      "compose",
+      "--env-file",
+      productionEnvFile,
+      "-f",
+      "deploy/compose.staging.yaml",
+      "config",
+      "--quiet",
+    ],
+    20,
+  );
+  if (
+    restricted.code === 0 ||
+    restricted.timedOut ||
+    !restricted.stderr.includes("SIGNUP_EMAIL_ALLOWLIST")
+  )
+    throw new Error("Staging must reject an empty signup allowlist");
   await checked("PostgreSQL start", comp(["up", "-d", "postgres"]), 120);
   await waitFor("PostgreSQL", () => health("postgres"));
   await checked(

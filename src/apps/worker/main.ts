@@ -11,6 +11,7 @@ import { assertActivePolicy, loadPolicy } from "../../modules/policy";
 import { readWorkerConfig } from "../../platform/config";
 import { createDatabase } from "../../platform/db";
 import { operationalEvent } from "../../platform/errors";
+import { sendOperationalNotification } from "../../platform/notifications";
 
 const config = readWorkerConfig();
 const db = createDatabase(config);
@@ -70,19 +71,12 @@ try {
           config.OPERATIONS_WEBHOOK &&
           Date.now() - lastAlert > 3600_000
         ) {
-          const response = await fetch(config.OPERATIONS_WEBHOOK, {
-            method: "POST",
-            redirect: "error",
-            signal: AbortSignal.timeout(5000),
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: status?.exhausted
-                ? "Zephium billing work requires operator attention"
-                : "Zephium cloud spending is near a configured safety limit",
-            }),
-          });
-          await response.body?.cancel();
-          if (!response.ok) throw new Error("Operational alert failed");
+          await sendOperationalNotification(
+            config.OPERATIONS_WEBHOOK,
+            status?.exhausted
+              ? "Zephium billing work requires operator attention"
+              : "Zephium cloud spending is near a configured safety limit",
+          );
           lastAlert = Date.now();
         }
       }

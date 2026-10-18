@@ -86,6 +86,9 @@ export const policySchema = z
     revision: z.number().int().positive().max(2_000_000_000),
     enabled: z.boolean(),
     freePlan: z.string(),
+    // Omitted preserves arbitrary-credit self-hosting and historical policy digests.
+    // When set, one accounting unit is one millionth of a USD usage credit.
+    creditCurrency: z.literal("USD").optional(),
     selfHostedPlan: z.string().nullable().default(null),
     defaults: z
       .record(
@@ -285,6 +288,8 @@ export async function loadPolicy(path: string): Promise<CloudPolicy> {
 }
 /** Commercial identities remain stable; retire an offer without erasing existing entitlements. */
 export function assertPolicyEvolution(previous: CloudPolicy, next: CloudPolicy) {
+  if (previous.creditCurrency && previous.creditCurrency !== next.creditCurrency)
+    throw new Error("Keep the established credit currency; balances cannot be reinterpreted");
   if (
     previous.freePlan !== next.freePlan ||
     previous.plans.some((p) => !next.plans.some((n) => n.id === p.id))
@@ -310,6 +315,13 @@ export async function registerPolicy(db: Database, p: CloudPolicy) {
     const [prior] =
       await tx`SELECT configuration FROM cloud_policy p JOIN cloud_active_policy a ON a.revision=p.revision WHERE a.singleton=true`;
     if (prior) assertPolicyEvolution(prior.configuration as CloudPolicy, p);
+    if (p.creditCurrency && !prior?.configuration?.creditCurrency) {
+      const [balance] =
+        await tx`SELECT EXISTS(SELECT 1 FROM credit_grant WHERE kind='topup' AND NOT revoked
+        AND amount>spent AND (expires_at IS NULL OR expires_at>clock_timestamp())) AS outstanding`;
+      if (balance?.outstanding)
+        throw new Error("Review existing purchased balances before assigning a credit currency");
+    }
     const [existing] = await tx`SELECT digest FROM cloud_policy WHERE revision=${p.revision}`;
     if (existing && existing.digest !== digest)
       throw new Error("Cloud policy revision reused with different content");

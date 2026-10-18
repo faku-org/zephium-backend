@@ -2316,6 +2316,31 @@
           },
           "purchased_usage_available": {
             "type": "boolean"
+          },
+          "purchased_balance": {
+            "description": "Display value of available purchased usage credit, excluding held/expired/revoked units. Null unless the policy explicitly denominates credits in USD. Not a cash or refund balance.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "pattern": "^[0-9]+\\.[0-9]{6}$"
+                  }
+                },
+                "required": [
+                  "currency",
+                  "amount"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": [
@@ -2333,7 +2358,8 @@
           "allowance",
           "purchased_remaining",
           "bonus_remaining",
-          "bonus_expires_at"
+          "bonus_expires_at",
+          "purchased_balance"
         ],
         "additionalProperties": false
       },

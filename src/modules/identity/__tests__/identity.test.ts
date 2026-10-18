@@ -428,3 +428,27 @@ test("resending rotates the code and keeps only one verification record", async 
     expect((await request("/sign-in/email-otp", { email, otp: old })).status).toBe(401);
   expect((await request("/sign-in/email-otp", { email, otp: current })).status).toBe(200);
 });
+
+test("production enrollment fails closed when enabled disposable-domain data is empty or missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "zephium-disposable-data-"));
+  const path = join(directory, "domains.txt");
+  const config = {
+    ...fixture.config,
+    NODE_ENV: "production" as const,
+    BLOCK_DISPOSABLE_EMAIL: "true" as const,
+    DISPOSABLE_EMAIL_DOMAINS_FILE: path,
+  };
+  try {
+    expect(() => createIdentityRoutes(config, fixture.db, auth, () => "127.0.0.1")).toThrow(
+      "Disposable email domain data unavailable",
+    );
+    await writeFile(path, "# Empty list must not silently disable a production protection\n\n");
+    expect(() => createIdentityRoutes(config, fixture.db, auth, () => "127.0.0.1")).toThrow(
+      "Disposable email domain data unavailable",
+    );
+    await writeFile(path, "blocked.example\n");
+    expect(() => createIdentityRoutes(config, fixture.db, auth, () => "127.0.0.1")).not.toThrow();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

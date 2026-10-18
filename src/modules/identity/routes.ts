@@ -29,12 +29,15 @@ function deviceLabel(value: string | undefined): string | undefined {
 function disposableDomains(config: Config): Set<string> {
   if (config.BLOCK_DISPOSABLE_EMAIL !== "true") return new Set();
   try {
-    return new Set(
+    const domains = new Set(
       readFileSync(config.DISPOSABLE_EMAIL_DOMAINS_FILE, "utf8")
         .split(/\r?\n/)
         .map((line) => line.trim().toLowerCase())
         .filter((line) => line !== "" && !line.startsWith("#")),
     );
+    if (config.NODE_ENV === "production" && domains.size === 0)
+      throw new Error("Disposable email domain data unavailable");
+    return domains;
   } catch {
     if (config.NODE_ENV === "production")
       throw new Error("Disposable email domain data unavailable");

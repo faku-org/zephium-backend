@@ -393,6 +393,9 @@ export async function usageSummary(db: Database, p: CloudPolicy, userId: string,
         await tx`SELECT amount FROM cloud_spend_bucket WHERE key=${budget.scope} || ':free:' || to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD')`;
       freePaused = BigInt(bucket?.amount ?? "0") >= BigInt(budget.freeDailyUsdMicros);
     }
+    const purchased = grants
+      .filter((g) => g.kind === "topup")
+      .reduce((n, g) => n + BigInt(g.amount) - BigInt(g.spent) - BigInt(g.held), 0n);
     return {
       schema_version: 1,
       cloud_enabled: p.enabled,
@@ -428,10 +431,14 @@ export async function usageSummary(db: Database, p: CloudPolicy, userId: string,
       bonus_expires_at: grants.find((g) => g.kind === "welcome")?.expires_at
         ? new Date(grants.find((g) => g.kind === "welcome")?.expires_at).toISOString()
         : null,
-      purchased_remaining: grants
-        .filter((g) => g.kind === "topup")
-        .reduce((n, g) => n + BigInt(g.amount) - BigInt(g.spent) - BigInt(g.held), 0n)
-        .toString(),
+      purchased_remaining: purchased.toString(),
+      purchased_balance:
+        p.creditCurrency === "USD"
+          ? {
+              currency: "USD",
+              amount: `${purchased / 1000000n}.${(purchased % 1000000n).toString().padStart(6, "0")}`,
+            }
+          : null,
     };
   });
 }
