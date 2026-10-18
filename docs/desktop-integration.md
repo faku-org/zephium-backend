@@ -1,0 +1,61 @@
+# Desktop integration handoff
+
+This is a contract for a separate native desktop implementation. It does not imply a deployed backend, enabled hosted models, live prices, or completed desktop changes. Use the environment's exact API origin and the schemas in [api.md](api.md) and [openapi.json](openapi.json).
+
+## Connection and account
+
+Fetch unauthenticated `GET /v1/client-config` before showing hosted features. Cache by its strong ETag for up to 300 seconds and handle 304. It supplies `cloud_enabled`, `billing_enabled`, `signup_open`, minimum client version, and an optional notice. Treat these as service hints; authenticated catalog and usage responses still decide what an account can use.
+
+For native sign-in, send `POST /api/auth/email-otp/send-verification-otp` with `{email,type:"sign-in"}`, then submit `{email,otp,device?}` to `POST /api/auth/sign-in/email-otp`. A new account can be created by this same flow when sign-up is open. The send response is deliberately generic; prompt for a six-digit code rather than assuming email was delivered. The optional device label appears in session management. There is no password or OAuth route.
+
+Read `set-auth-token` from the successful sign-in response. Keep this signed opaque bearer in the OS credential vault under the exact API origin and environment, with Rust/native code owning retrieval. Send `Authorization: Bearer <token>` only to that origin. Never put it in a webview, ordinary app database, localStorage, telemetry, crash report, custom endpoint, or direct BYOK provider call. An account can be signed into more than one Zephium origin; keep tokens separate. For 401 unauthorized, clear only the matching vault entry and sign in again. A 401 reauthentication_required means a sensitive action needs a fresh sign-in; it does not itself mean the existing session was revoked. Expose caller-owned session list/revocation and logout controls.
+
+`GET /v1/account` includes nullable name; `PATCH /v1/account` edits it. Account deletion uses `POST /v1/account/deletion/code` followed by `POST /v1/account/deletion` with the emailed OTP. Email change uses `POST /v1/account/email/code` and `PATCH /v1/account/email` with the new address and OTP; both steps require a session created within ten minutes, and completion revokes sessions. Do not offer these as a single unverified mutation. `GET /v1/account/export` provides safe account, billing, usage, history URL, and session data.
+
+## Billing and catalog
+
+When billing is disabled, `GET /v1/billing` gives `offers:null`, `paid:false`, and subscription status `not_applicable`; hide purchase and portal actions. When enabled, offers contain Polar-sourced `product_name` and `{amount_minor,currency}` for subscriptions and top-ups. Display those prices exactly, with the selected plan/interval or top-up ID; never synthesize a currency price from credits. `POST /v1/billing/checkout` returns a caller-bound Polar URL. After returning from checkout, call `POST /v1/billing/refresh`; it is limited to six per minute per user and can reconcile a paid top-up immediately. Handle 409 `no_billing_account` from portal as a customer with no Polar account yet.
+
+Fetch `GET /v1/models` and `GET /v1/usage` after authentication. The catalog includes `defaults` for lead/page/light/decision/transcribe, a per-model `available` flag, description, tier, policy price strings, and byte/search/timeout limits. A listed locked model remains visible for explanation but must not be sent to generation. If a default is null, let the user choose an available model or disable that role. The default production policy starts disabled; the separate staging template is not deployment or availability proof.
+
+Display usage by dividing decimal-string microcredit values by `unit_scale` for presentation, while retaining strings for accounting. Show included `allowance.*_units`, welcome `bonus_remaining` and expiry, purchased balance, held units, period end, and optional daily cap distinctly. Use `GET /v1/usage/requests` with its opaque cursor for caller-owned history, at most 50 entries per page; use the per-request receipt when generation outcome is uncertain. Treat a charge as final only in `settled` state.
+
+In self-hosted mode, policy `selfHostedPlan` can grant a configured plan without Polar. Billing still reports no Zephium purchase flow while `capabilities.hostedAI` can be true. Keep hosted API keys server-side; catalog and usage responses must never be treated as credential sources. Direct BYOK calls remain separate on the desktop.
+
+## Generation and stream accounting
+
+Send provider-native bodies to the paths in [api.md](api.md). Respect each available model's capability flags and `limits`. Hosted native search is only through supported OpenAI or Anthropic tools. There is no standalone hosted search endpoint. Preserve native JSON or SSE content handling. The gateway does not store prompt or output content.
+
+Generate one UUID `Idempotency-Key` for each logical generation and retain it with the call. Record `X-Zephium-Request-Id`, policy revision, and JSON `X-Zephium-Usage` when present. Local admission estimates a conservative credit hold from bytes, request structure, media context, output, and search ceiling; it does not make a provider token-count preflight call. The final bill uses reported actual usage. Never show a hold as a settled charge.
+
+For SSE, keep consuming the raw byte stream until EOF after the provider's terminal event (for example, `response.completed`, `message_stop`, or `[DONE]`, depending on the protocol). The backend may append a `: zephium ...` comment with request ID and settled/pending/error accounting. Parse it separately from provider text and preserve provider chunks. The comment is best effort and can be missing after a disconnect. Consult `GET /v1/usage/requests/{id}` when it is absent or pending; do not replay a possibly dispatched generation automatically. If the outcome remains uncertain, ask the user before a new logical call. A 409 on the same idempotency key will not replay output.
+
+Handle 401 by error code: unauthorized requires a new scoped session, while reauthentication_required asks for a fresh sign-in for the sensitive action. 402 means credits or daily cap are unavailable; 429 covers admission, concurrency, or provider limits. Honor `Retry-After` when present. Error JSON has a nullable `request_id`; use a real ID to inspect the receipt. Keep custom API origins and their tokens isolated from each other and from the default Zephium origin.
+
+## Release contract changes — 2026-10-18
+
+- `POST /openai/v1/audio/transcriptions`: Bearer plus required UUID Idempotency-Key, multipart model(row ID), response_format=json, optional ISO639-1 language, and file. PCM16 little-endian mono WAV, positive sample rate <=16000Hz, duration<=240s, total multipart<=min(row max_request_bytes,8MiB). Returns `{text}` (empty is valid), X-Zephium-Request-Id, X-Zephium-Policy-Revision and X-Zephium-Usage. Response<=64KiB. Backend deadline85s includes upload; do not retry the take automatically.
+- Catalog adds transcribe role/default, optional price.per_million_tokens.audio_input and price.per_audio_minute. Voice limits add max_audio_duration_ms=240000 and max_response_bytes=65536; max_duration_ms is at most85000.
+- `GET /v1/usage`: **period_end is now nullable**. One-time signup allowance has allowance.renews=false, allowance.expires_at=null, period_end=null. Show remaining trial allowance, never a fabricated renewal date. No separate welcome grant in the hosted policy. Also returns free_usage_paused and purchased_usage_available; purchased credit remains usable after the free subsidy pool is exhausted without unlocking Pro rows.
+- History/receipt records add nullable funding_source (`allowance`, `purchased`, `mixed`); null covers pre-reservation/legacy rows. Make purchased funding visible to users.
+- `GET /v1/client-config` adds signup_mode (`open`, `allowlist`, `closed`). For invited staging signup use signup_open=true with signup_mode=allowlist. The email allowlist itself is never public; unapproved sends still receive generic202.
+- `POST /v1/billing/checkout` and portal use fixed `https://zephium.app/billing/return`. The desktop sends no return URL and polls refresh at <=6/min. Website owns the static page.
+- Auth delivery failures now return503 email_unavailable with real Retry-After;202 is generic acceptance, not proof that the recipient received a message. Previously issued SHA256-only sign-in codes are invalid after the keyed-hash upgrade; request a fresh code.
+
+New/relevant stable errors (same `{error:{code,retry_after?},request_id}` envelope):
+
+| HTTP | Code | Desktop behavior |
+| --- | --- | --- |
+| 400 | invalid_audio | Recording is malformed/truncated; record again |
+| 415 | unsupported_audio_format | Unsupported audio encoding/channels/sample rate |
+| 422 | audio_too_long | Record at most four minutes |
+| 403 | plan_required | Offer upgrade for this known plan-gated model |
+| 429 | free_usage_limit_reached | Free subsidy temporarily exhausted; show reset/retry and purchased/BYOK options |
+| 429 | usage_confirmation_limited | Too many unresolved calls; wait for the indicated UTC reset |
+| 503 | cloud_budget_exhausted | Hosted spending safety stop; daily stop includes Retry-After, total stop needs operator action |
+| 503 | email_unavailable | Email provider/delivery capacity unavailable; retry after indicated delay |
+| 400 | context_limit_exceeded | Reduce input/history before retrying |
+
+Existing invalid_request400, body_too_large413, insufficient_credits402, daily_limit_reached402, idempotency409, provider errors and401 rules continue. New local429s include Retry-After. A desktop retry cap of15min is a polling cap, not an earlier server reset. Ambiguous408/499 provider failures retain exposure. No provider payloads/OTPs are logged or persisted. No desktop code was changed in this backend handoff.
+
+The modular refactor preserves HTTP paths and response shapes. Account mutations now revalidate the session after transaction lock waits, so a revoked/expired bearer can return401 even when it was valid at request arrival. Signup finalization failures leave no partially committed account/session; retry the normal email-code flow.

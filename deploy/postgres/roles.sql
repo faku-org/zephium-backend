@@ -1,0 +1,9 @@
+-- Run as the provisioning owner; set passwords through the secret store, not this file.
+CREATE ROLE zephium_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE ROLE zephium_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+ALTER DATABASE zephium OWNER TO zephium_migrator;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO zephium_migrator;
+GRANT USAGE ON SCHEMA public TO zephium_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE zephium_migrator IN SCHEMA public GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO zephium_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE zephium_migrator IN SCHEMA public GRANT USAGE,SELECT ON SEQUENCES TO zephium_app;

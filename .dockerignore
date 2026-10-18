@@ -1,0 +1,14 @@
+.git
+.env*
+!.env.example
+.local
+node_modules
+coverage
+target
+**/*.pem
+**/*.key
+**/*.agekey
+
+# Exclude colocated regression tests from runtime images.
+**/__tests__
+**/*.test.ts

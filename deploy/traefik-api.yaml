@@ -1,0 +1,23 @@
+# Dynamic file-provider route. The service URL must resolve on the deployment network.
+# Static privacy flags live in traefik-privacy-args.txt; no auth, redirect, or
+# compression middleware is attached to this streaming API route.
+http:
+  routers:
+    zephium-api:
+      entryPoints:
+        - websecure
+      rule: "Host(`api.zephium.app`)"
+      service: zephium-api
+      tls: {}
+  services:
+    zephium-api:
+      loadBalancer:
+        serversTransport: zephium-api
+        responseForwarding:
+          flushInterval: "-1ms"
+        servers:
+          - url: "http://zephium-backend:3000"
+  serversTransports:
+    zephium-api:
+      forwardingTimeouts:
+        responseHeaderTimeout: "330s"

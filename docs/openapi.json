@@ -1,0 +1,2850 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Zephium backend HTTP contract",
+    "version": "1.0.0",
+    "description": "Repository contract only; no public deployment, provider availability, or approved prices asserted. Signed opaque bearer sessions use email-code sign-in; hosted models are disabled by default."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Relative to configured API_ORIGIN"
+    }
+  ],
+  "security": [
+    {
+      "bearerSession": []
+    }
+  ],
+  "paths": {
+    "/api/auth/email-otp/send-verification-otp": {
+      "post": {
+        "summary": "Request a sign-in code for an existing or eligible new account",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationSend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Generic acceptance. Eligible sends await bounded provider acceptance; suppressed addresses remain indistinguishable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account": {
+      "get": {
+        "summary": "Inspect current account",
+        "responses": {
+          "200": {
+            "description": "Account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit caller display name",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account/export": {
+      "get": {
+        "summary": "Export account without secrets",
+        "responses": {
+          "200": {
+            "description": "Content-free account export without credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "const": 1
+                    },
+                    "account": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string",
+                          "format": "email"
+                        },
+                        "name": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "name",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "billing": {
+                      "$ref": "#/components/schemas/BillingView"
+                    },
+                    "usage": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/Usage"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "usage_history_url": {
+                      "const": "/v1/usage/requests"
+                    },
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Session"
+                      },
+                      "maxItems": 100
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "account",
+                    "billing",
+                    "usage",
+                    "usage_history_url",
+                    "sessions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions": {
+      "get": {
+        "summary": "List at most 100 live sessions",
+        "responses": {
+          "200": {
+            "description": "Safe metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "$ref": "#/components/schemas/Session"
+                      }
+                    }
+                  },
+                  "required": [
+                    "sessions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{id}": {
+      "delete": {
+        "summary": "Revoke caller-owned session",
+        "responses": {
+          "204": {
+            "description": "No content"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/logout": {
+      "post": {
+        "summary": "Revoke current session",
+        "responses": {
+          "204": {
+            "description": "No content"
+          }
+        }
+      }
+    },
+    "/v1/logout-all": {
+      "post": {
+        "summary": "Revoke all caller sessions",
+        "responses": {
+          "204": {
+            "description": "No content"
+          }
+        }
+      }
+    },
+    "/v1/billing": {
+      "get": {
+        "summary": "Inspect reconciled billing state and Polar-priced offers",
+        "responses": {
+          "200": {
+            "description": "Billing state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/checkout": {
+      "post": {
+        "summary": "Create caller-bound checkout",
+        "responses": {
+          "200": {
+            "description": "Checkout URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Checkout"
+              }
+            }
+          }
+        },
+        "description": "Requires enabled billing and an offered product. The checkout is bound to the caller, product, and policy revision."
+      }
+    },
+    "/v1/billing/portal": {
+      "post": {
+        "summary": "Create caller-bound portal URL",
+        "responses": {
+          "200": {
+            "description": "Portal URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Returns 409 no_billing_account when the caller has no Polar customer; other provider failures return 503."
+      }
+    },
+    "/v1/account/deletion": {
+      "post": {
+        "summary": "Seal account and schedule deletion",
+        "responses": {
+          "202": {
+            "description": "Sealed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "deleting"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "otp": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  }
+                },
+                "required": [
+                  "otp"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "description": "Consumes a purpose-bound email code, seals the account, and revokes sessions."
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "summary": "List plan-filtered catalog, including locked models and role defaults",
+        "responses": {
+          "200": {
+            "description": "Caller-filtered catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Models"
+                }
+              }
+            }
+          }
+        },
+        "description": "Only enabled provider-backed models appear; available=false means the caller cannot use that model. Disabled policy returns empty models and null defaults."
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "summary": "Inspect credit and usage",
+        "responses": {
+          "200": {
+            "description": "Credit summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usage"
+                }
+              }
+            }
+          }
+        },
+        "description": "Integer microcredit units; unit_scale is 1000000."
+      }
+    },
+    "/v1/usage/limits": {
+      "put": {
+        "summary": "Set or clear daily credit limit",
+        "responses": {
+          "204": {
+            "description": "No content"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "daily_limit_units": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,14})$",
+                        "description": "Integer microcredit units as a decimal string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "daily_limit_units"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/usage/requests/{id}": {
+      "get": {
+        "summary": "Inspect caller-owned request state",
+        "responses": {
+          "200": {
+            "description": "Accounting metadata; no generated output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestState"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "Only state=settled establishes a final charged amount; generated content is never returned."
+      }
+    },
+    "/openai/v1/responses": {
+      "post": {
+        "summary": "OpenAI Responses",
+        "responses": {
+          "200": {
+            "description": "Provider-native JSON or SSE. X-Zephium-Request-Id and X-Zephium-Policy-Revision returned; JSON also has X-Zephium-Usage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Policy-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                },
+                "description": "JSON only; streams use a best-effort accounting comment"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAIRequest"
+              }
+            }
+          }
+        },
+        "description": "Provider-native accepted top-level fields only; policy and protocol validation may reject unsupported modes. Hosted cloud service required. Admission reserves a conservative local credit hold without a provider token-count preflight. Final charge uses reported actual usage. SSE preserves native provider frames and may append a best-effort Zephium accounting comment after the provider terminal event; consume through EOF and consult the request receipt if absent.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "One UUID per logical generation; reuse returns 409 and never replays output."
+          }
+        ]
+      }
+    },
+    "/anthropic/v1/messages": {
+      "post": {
+        "summary": "Anthropic Messages",
+        "responses": {
+          "200": {
+            "description": "Provider-native JSON or SSE. X-Zephium-Request-Id and X-Zephium-Policy-Revision returned; JSON also has X-Zephium-Usage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Policy-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                },
+                "description": "JSON only; streams use a best-effort accounting comment"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnthropicRequest"
+              }
+            }
+          }
+        },
+        "description": "Provider-native accepted top-level fields only; policy and protocol validation may reject unsupported modes. Hosted cloud service required. Admission reserves a conservative local credit hold without a provider token-count preflight. Final charge uses reported actual usage. SSE preserves native provider frames and may append a best-effort Zephium accounting comment after the provider terminal event; consume through EOF and consult the request receipt if absent.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "One UUID per logical generation; reuse returns 409 and never replays output."
+          }
+        ]
+      }
+    },
+    "/openrouter/v1/chat/completions": {
+      "post": {
+        "summary": "OpenRouter chat completions",
+        "responses": {
+          "200": {
+            "description": "Provider-native JSON or SSE. X-Zephium-Request-Id and X-Zephium-Policy-Revision returned; JSON also has X-Zephium-Usage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Policy-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                },
+                "description": "JSON only; streams use a best-effort accounting comment"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRouterRequest"
+              }
+            }
+          }
+        },
+        "description": "Provider-native accepted top-level fields only; policy and protocol validation may reject unsupported modes. Hosted cloud service required. Admission reserves a conservative local credit hold without a provider token-count preflight. Final charge uses reported actual usage. SSE preserves native provider frames and may append a best-effort Zephium accounting comment after the provider terminal event; consume through EOF and consult the request receipt if absent.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "One UUID per logical generation; reuse returns 409 and never replays output."
+          }
+        ]
+      }
+    },
+    "/deepseek/v1/chat/completions": {
+      "post": {
+        "summary": "DeepSeek chat completions",
+        "responses": {
+          "200": {
+            "description": "Provider-native JSON or SSE. X-Zephium-Request-Id and X-Zephium-Policy-Revision returned; JSON also has X-Zephium-Usage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Policy-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                },
+                "description": "JSON only; streams use a best-effort accounting comment"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeepSeekRequest"
+              }
+            }
+          }
+        },
+        "description": "Provider-native accepted top-level fields only; policy and protocol validation may reject unsupported modes. Hosted cloud service required. Admission reserves a conservative local credit hold without a provider token-count preflight. Final charge uses reported actual usage. SSE preserves native provider frames and may append a best-effort Zephium accounting comment after the provider terminal event; consume through EOF and consult the request receipt if absent.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "One UUID per logical generation; reuse returns 409 and never replays output."
+          }
+        ]
+      }
+    },
+    "/v1/systemone": {
+      "post": {
+        "summary": "TypeSafe Jev",
+        "responses": {
+          "200": {
+            "description": "Provider-native JSON or SSE. X-Zephium-Request-Id and X-Zephium-Policy-Revision returned; JSON also has X-Zephium-Usage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Policy-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                },
+                "description": "JSON only; streams use a best-effort accounting comment"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypeSafeRequest"
+              }
+            }
+          }
+        },
+        "description": "Provider-native accepted top-level fields only; policy and protocol validation may reject unsupported modes. Hosted cloud service required. Admission reserves a conservative local credit hold without a provider token-count preflight. Final charge uses reported actual usage. SSE preserves native provider frames and may append a best-effort Zephium accounting comment after the provider terminal event; consume through EOF and consult the request receipt if absent.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "One UUID per logical generation; reuse returns 409 and never replays output."
+          }
+        ]
+      }
+    },
+    "/google/v1beta/models/{action}": {
+      "post": {
+        "summary": "Google streamGenerateContent",
+        "responses": {
+          "200": {
+            "description": "Provider-native SSE; hosted tools other than function declarations rejected",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Policy-Revision": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                },
+                "description": "JSON only; streams use a best-effort accounting comment"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleRequest"
+              }
+            }
+          }
+        },
+        "description": "Action must be model:streamGenerateContent. Model comes from path and active catalog. Admission reserves a conservative local credit hold without a provider token-count preflight. Final charge uses reported actual usage. SSE preserves native provider frames and may append a best-effort Zephium accounting comment after the provider terminal event; consume through EOF and consult the request receipt if absent.",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+:streamGenerateContent$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "One UUID per logical generation; reuse returns 409 and never replays output."
+          }
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "summary": "Process liveness",
+        "responses": {
+          "200": {
+            "description": "Live",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "PostgreSQL readiness",
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/webhooks/polar": {
+      "post": {
+        "summary": "Receive signed Polar event",
+        "responses": {
+          "202": {
+            "description": "No content"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [],
+        "description": "Exact-byte Standard Webhooks signature required; not a desktop endpoint."
+      }
+    },
+    "/api/auth/sign-in/email-otp": {
+      "post": {
+        "summary": "Create a signed native session with a one-use email code",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpSignIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Better Auth session JSON"
+                }
+              }
+            },
+            "headers": {
+              "set-auth-token": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Store only in an origin-scoped OS credential vault"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/client-config": {
+      "get": {
+        "summary": "Public, cacheable desktop service configuration",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Public feature and version hints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientConfig"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong validator"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "public, max-age=300, must-revalidate"
+              }
+            }
+          },
+          "304": {
+            "description": "Representation unchanged; no response body"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "If-None-Match",
+          "in": "header",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/v1/billing/refresh": {
+      "post": {
+        "summary": "Refresh caller subscription and known checkout orders",
+        "description": "Six requests per minute per user. Paid top-ups are applied idempotently from caller-bound checkout IDs.",
+        "responses": {
+          "200": {
+            "description": "Reconciled state and offers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingView"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account/deletion/code": {
+      "post": {
+        "summary": "Send account deletion code to current email",
+        "responses": {
+          "202": {
+            "description": "Code accepted for delivery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account/email/code": {
+      "post": {
+        "summary": "Send a code to a new email address",
+        "description": "Requires a session created in the past ten minutes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Code accepted for delivery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account/email": {
+      "patch": {
+        "summary": "Change email with a purpose-bound code",
+        "description": "Requires a session created in the past ten minutes; revokes sessions on success.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  },
+                  "otp": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  }
+                },
+                "required": [
+                  "email",
+                  "otp"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email changed; sign in again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "const": true
+                    },
+                    "reauthentication_required": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "updated",
+                    "reauthentication_required"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/usage/requests": {
+      "get": {
+        "summary": "Page caller-owned content-free request history",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Opaque cursor from the previous page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Up to 50 requests and nullable next cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/source": {
+      "get": {
+        "summary": "License and corresponding source",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Operator-configured source offer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "license",
+                    "source_url"
+                  ],
+                  "properties": {
+                    "license": {
+                      "type": "string",
+                      "enum": [
+                        "AGPL-3.0-only"
+                      ]
+                    },
+                    "source_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uri"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openai/v1/audio/transcriptions": {
+      "post": {
+        "summary": "Transcribe a bounded PCM16 mono WAV recording",
+        "description": "At most min(model max_request_bytes,8 MiB) multipart, WAV at most16kHz and240 seconds,85-second overall deadline including upload. No request replay or stored audio/transcript. Customer billing uses authoritative audio/text tokens, or an explicit duration tariff only for a successful response with absent usage.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "model",
+                  "response_format",
+                  "file"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "Available transcribe catalog row ID"
+                  },
+                  "response_format": {
+                    "const": "json"
+                  },
+                  "language": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2}$"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "audio/wav"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON text only, at most64KiB. Silence may produce empty text.",
+            "headers": {
+              "X-Zephium-Request-Id": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "X-Zephium-Usage": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "settled",
+                    "pending"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "text"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "408": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "504": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Signed opaque set-auth-token from email-code sign-in, scoped to this API origin; not a JWT."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "retry_after": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          "request_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "error",
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "Accepted": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "const": true
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "additionalProperties": false
+      },
+      "VerificationSend": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "type": {
+            "const": "sign-in"
+          }
+        },
+        "required": [
+          "email",
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "device": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "device",
+          "current",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "emailVerified",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "Subscription": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "not_applicable when billing is disabled"
+          },
+          "paidUntil": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "paidUntil",
+          "cancelAtPeriodEnd"
+        ],
+        "additionalProperties": false
+      },
+      "Checkout": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "interval": {
+                "type": "string",
+                "enum": [
+                  "monthly",
+                  "yearly"
+                ]
+              },
+              "plan": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "interval"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "topup": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "topup"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Model": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "anthropic",
+              "google",
+              "openrouter",
+              "deepseek",
+              "typesafe"
+            ]
+          },
+          "upstream_model": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "lead",
+                "page",
+                "light",
+                "decision",
+                "transcribe"
+              ]
+            }
+          },
+          "recommended": {
+            "type": "boolean"
+          },
+          "recommended_roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "lead",
+                "page",
+                "light",
+                "decision",
+                "transcribe"
+              ]
+            }
+          },
+          "context_window": {
+            "type": "integer"
+          },
+          "max_output": {
+            "type": "integer"
+          },
+          "supports": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "type": "boolean"
+              },
+              "vision": {
+                "type": "boolean"
+              },
+              "prompt_cache": {
+                "type": "boolean"
+              },
+              "reasoning": {
+                "type": "boolean"
+              },
+              "native_search": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "tools",
+              "vision",
+              "prompt_cache",
+              "reasoning",
+              "native_search"
+            ],
+            "additionalProperties": false
+          },
+          "price": {
+            "type": "object",
+            "properties": {
+              "unit_scale": {
+                "const": 1000000
+              },
+              "per_million_tokens": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer microcredit units as a decimal string"
+                  },
+                  "cached_input": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer microcredit units as a decimal string"
+                  },
+                  "cache_write_5m": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer microcredit units as a decimal string"
+                  },
+                  "cache_write_1h": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer microcredit units as a decimal string"
+                  },
+                  "output": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer microcredit units as a decimal string"
+                  },
+                  "audio_input": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer microcredit units as a decimal string"
+                  }
+                },
+                "required": [
+                  "input",
+                  "cached_input",
+                  "cache_write_5m",
+                  "cache_write_1h",
+                  "output"
+                ],
+                "additionalProperties": false
+              },
+              "per_search_call": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,14})$",
+                "description": "Integer microcredit units as a decimal string"
+              },
+              "per_audio_minute": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,14})$",
+                "description": "Integer microcredit units as a decimal string"
+              }
+            },
+            "required": [
+              "unit_scale",
+              "per_million_tokens",
+              "per_search_call"
+            ],
+            "additionalProperties": false
+          },
+          "plan_min": {
+            "type": "string"
+          },
+          "allowed_plans": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "balanced",
+              "frontier"
+            ]
+          },
+          "available": {
+            "type": "boolean",
+            "description": "False when listed for explanation but locked for this account"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "max_request_bytes": {
+                "type": "integer"
+              },
+              "max_search_calls": {
+                "type": "integer"
+              },
+              "idle_timeout_ms": {
+                "type": "integer"
+              },
+              "max_duration_ms": {
+                "type": "integer"
+              },
+              "max_audio_duration_ms": {
+                "const": 240000
+              },
+              "max_response_bytes": {
+                "const": 65536
+              }
+            },
+            "required": [
+              "max_request_bytes",
+              "max_search_calls",
+              "idle_timeout_ms",
+              "max_duration_ms"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "upstream_model",
+          "display_name",
+          "roles",
+          "recommended",
+          "recommended_roles",
+          "context_window",
+          "max_output",
+          "supports",
+          "price",
+          "plan_min",
+          "allowed_plans",
+          "description",
+          "tier",
+          "available",
+          "limits"
+        ],
+        "additionalProperties": false
+      },
+      "Models": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "policy_revision": {
+            "type": "integer"
+          },
+          "cloud_enabled": {
+            "type": "boolean"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "properties": {
+              "lead": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "page": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "light": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decision": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "transcribe": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "lead",
+              "page",
+              "light",
+              "decision",
+              "transcribe"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schema_version",
+          "policy_revision",
+          "cloud_enabled",
+          "models",
+          "defaults"
+        ],
+        "additionalProperties": false
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "cloud_enabled": {
+            "type": "boolean"
+          },
+          "policy_revision": {
+            "type": "integer"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "unit_scale": {
+            "const": 1000000
+          },
+          "credits_remaining": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "reserved_units": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "period_end": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spent_today": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "daily_limit_units": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,14})$",
+                "description": "Integer microcredit units as a decimal string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "by_model": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model_id": {
+                  "type": "string"
+                },
+                "units": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]{0,14})$",
+                  "description": "Integer microcredit units as a decimal string"
+                },
+                "requests": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "model_id",
+                "units",
+                "requests"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "allowance": {
+            "type": "object",
+            "properties": {
+              "total_units": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,14})$",
+                "description": "Integer microcredit units as a decimal string"
+              },
+              "used_units": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,14})$",
+                "description": "Integer microcredit units as a decimal string"
+              },
+              "reserved_units": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]{0,14})$",
+                "description": "Integer microcredit units as a decimal string"
+              },
+              "renews": {
+                "type": "boolean"
+              },
+              "expires_at": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "total_units",
+              "used_units",
+              "reserved_units"
+            ],
+            "additionalProperties": false
+          },
+          "purchased_remaining": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "bonus_remaining": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "bonus_expires_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "free_usage_paused": {
+            "type": "boolean"
+          },
+          "purchased_usage_available": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schema_version",
+          "cloud_enabled",
+          "policy_revision",
+          "plan",
+          "unit_scale",
+          "credits_remaining",
+          "reserved_units",
+          "period_end",
+          "spent_today",
+          "daily_limit_units",
+          "by_model",
+          "allowance",
+          "purchased_remaining",
+          "bonus_remaining",
+          "bonus_expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "RequestState": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "policy_revision": {
+            "type": "integer"
+          },
+          "reserved": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "charged": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,14})$",
+            "description": "Integer microcredit units as a decimal string"
+          },
+          "error_class": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "funding_source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "allowance",
+              "purchased",
+              "mixed",
+              null
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "model_id",
+          "policy_revision",
+          "reserved",
+          "charged",
+          "error_class",
+          "started_at",
+          "finished_at"
+        ],
+        "additionalProperties": false
+      },
+      "OpenAIRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "input": {},
+          "instructions": {},
+          "tools": {
+            "type": "array",
+            "items": {}
+          },
+          "tool_choice": {},
+          "parallel_tool_calls": {},
+          "include": {},
+          "reasoning": {},
+          "text": {},
+          "temperature": {},
+          "top_p": {},
+          "truncation": {},
+          "max_output_tokens": {},
+          "max_tool_calls": {},
+          "stream": {
+            "type": "boolean"
+          },
+          "store": {},
+          "user": {},
+          "metadata": {},
+          "safety_identifier": {},
+          "prompt_cache_key": {},
+          "prompt_cache_retention": {},
+          "prompt_cache_options": {},
+          "service_tier": {},
+          "background": {},
+          "previous_response_id": {},
+          "conversation": {},
+          "stream_options": {}
+        },
+        "required": [
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {}
+          },
+          "system": {},
+          "tools": {
+            "type": "array",
+            "items": {}
+          },
+          "tool_choice": {},
+          "thinking": {},
+          "output_config": {},
+          "temperature": {},
+          "top_p": {},
+          "top_k": {},
+          "stream": {
+            "type": "boolean"
+          },
+          "stop_sequences": {},
+          "metadata": {},
+          "max_tokens": {},
+          "cache_control": {},
+          "service_tier": {}
+        },
+        "required": [
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "GoogleRequest": {
+        "type": "object",
+        "properties": {
+          "contents": {
+            "type": "array",
+            "items": {}
+          },
+          "systemInstruction": {},
+          "tools": {
+            "type": "array",
+            "items": {}
+          },
+          "toolConfig": {},
+          "generationConfig": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "contents"
+        ],
+        "additionalProperties": false
+      },
+      "OpenRouterRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {}
+          },
+          "tools": {
+            "type": "array",
+            "items": {}
+          },
+          "tool_choice": {},
+          "parallel_tool_calls": {},
+          "stream": {
+            "type": "boolean"
+          },
+          "stream_options": {},
+          "max_tokens": {},
+          "max_completion_tokens": {},
+          "temperature": {},
+          "top_p": {},
+          "top_k": {},
+          "stop": {},
+          "seed": {},
+          "response_format": {},
+          "reasoning": {},
+          "frequency_penalty": {},
+          "presence_penalty": {},
+          "user": {}
+        },
+        "required": [
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "DeepSeekRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {}
+          },
+          "tools": {
+            "type": "array",
+            "items": {}
+          },
+          "tool_choice": {},
+          "stream": {
+            "type": "boolean"
+          },
+          "stream_options": {},
+          "max_tokens": {},
+          "temperature": {},
+          "top_p": {},
+          "stop": {},
+          "response_format": {},
+          "thinking": {},
+          "frequency_penalty": {},
+          "presence_penalty": {},
+          "user": {}
+        },
+        "required": [
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "TypeSafeRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "state": {},
+          "questions": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "model",
+          "state",
+          "questions"
+        ],
+        "additionalProperties": false
+      },
+      "BillingView": {
+        "type": "object",
+        "properties": {
+          "subscription": {
+            "$ref": "#/components/schemas/Subscription"
+          },
+          "paid": {
+            "type": "boolean"
+          },
+          "capabilities": {
+            "type": "object",
+            "properties": {
+              "hostedAI": {
+                "type": "boolean"
+              },
+              "synchronization": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "hostedAI",
+              "synchronization"
+            ],
+            "additionalProperties": false
+          },
+          "offers": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "subscriptions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "plan": {
+                          "type": "string"
+                        },
+                        "interval": {
+                          "type": "string",
+                          "enum": [
+                            "monthly",
+                            "yearly"
+                          ]
+                        },
+                        "product_name": {
+                          "type": "string"
+                        },
+                        "price": {
+                          "type": "object",
+                          "properties": {
+                            "amount_minor": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "currency": {
+                              "type": "string",
+                              "pattern": "^[A-Z]{3}$"
+                            }
+                          },
+                          "required": [
+                            "amount_minor",
+                            "currency"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "plan",
+                        "interval",
+                        "product_name",
+                        "price"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "topups": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "units": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,14})$",
+                          "description": "Integer microcredit units as a decimal string"
+                        },
+                        "expires_days": {
+                          "oneOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "product_name": {
+                          "type": "string"
+                        },
+                        "price": {
+                          "type": "object",
+                          "properties": {
+                            "amount_minor": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "currency": {
+                              "type": "string",
+                              "pattern": "^[A-Z]{3}$"
+                            }
+                          },
+                          "required": [
+                            "amount_minor",
+                            "currency"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "units",
+                        "expires_days",
+                        "product_name",
+                        "price"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unit_scale": {
+                    "const": 1000000
+                  }
+                },
+                "required": [
+                  "subscriptions",
+                  "topups",
+                  "unit_scale"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "subscription",
+          "paid",
+          "capabilities",
+          "offers"
+        ],
+        "additionalProperties": false
+      },
+      "OtpSignIn": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "email",
+          "otp"
+        ],
+        "additionalProperties": false
+      },
+      "ClientConfig": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "cloud_enabled": {
+            "type": "boolean"
+          },
+          "signup_open": {
+            "type": "boolean"
+          },
+          "min_client_version": {
+            "type": "string"
+          },
+          "billing_enabled": {
+            "type": "boolean"
+          },
+          "notice": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "warning"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "text",
+                  "severity"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "signup_mode": {
+            "type": "string",
+            "enum": [
+              "open",
+              "allowlist",
+              "closed"
+            ]
+          }
+        },
+        "required": [
+          "schema_version",
+          "cloud_enabled",
+          "signup_open",
+          "min_client_version",
+          "billing_enabled",
+          "notice"
+        ],
+        "additionalProperties": false
+      },
+      "UsageHistory": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "model_id": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "units": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]{0,14})$",
+                  "description": "Integer microcredit units as a decimal string"
+                },
+                "reserved": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]{0,14})$",
+                  "description": "Integer microcredit units as a decimal string"
+                },
+                "started_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "finished_at": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "funding_source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "allowance",
+                    "purchased",
+                    "mixed",
+                    null
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "model_id",
+                "state",
+                "units",
+                "reserved",
+                "started_at",
+                "finished_at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "next_cursor": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "requests",
+          "next_cursor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Stable error code and nullable admitted request ID.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Desktop",
+      "description": "Public config, native account, billing, catalog, and usage routes"
+    }
+  ]
+}

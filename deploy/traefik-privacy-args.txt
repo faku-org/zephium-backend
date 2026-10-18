@@ -1,0 +1,4 @@
+--accesslog=false
+--log.level=ERROR
+--log.filepath=/dev/null
+--global.sendanonymoususage=false

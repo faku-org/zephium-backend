@@ -1,0 +1,22 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.local/
+coverage/
+dist/
+target/
+*.pem
+*.key
+*.agekey
+.DS_Store
+
+# Local assistant tooling is not part of the product or source distribution.
+.agents/
+.claude/
+skills-lock.json
+
+/AGENTS.md
+
+# Operator-owned staging policy beside Compose, not the public template.
+/deploy/zephium-staging-policy.json

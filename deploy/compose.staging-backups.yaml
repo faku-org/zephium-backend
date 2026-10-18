@@ -1,0 +1,12 @@
+# Add only after backup storage is configured and verified:
+# docker compose -f deploy/compose.staging.yaml -f deploy/compose.staging-backups.yaml ...
+services:
+  postgres:
+    command: [postgres, -c, config_file=/etc/postgresql/zephium.conf]
+    volumes:
+      - type: bind
+        source: ${ZEPHIUM_PGBACKREST_CONFIG_FILE}
+        target: /etc/pgbackrest/pgbackrest.conf
+        read_only: true
+        bind:
+          create_host_path: false

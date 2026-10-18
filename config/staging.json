@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "enabled": true,
+  "freePlan": "free",
+  "welcomeUnits": "0",
+  "welcomeExpiresDays": null,
+  "plans": [
+    {
+      "id": "free",
+      "rank": 0,
+      "allowanceUnits": "2000000",
+      "cycle": {
+        "kind": "once"
+      },
+      "maxConcurrent": 8,
+      "requestsPerMinute": 120,
+      "dailyLimitUnits": "1000000"
+    },
+    {
+      "id": "pro",
+      "rank": 1,
+      "allowanceUnits": "10000000",
+      "cycle": {
+        "kind": "calendar_month"
+      },
+      "maxConcurrent": 12,
+      "requestsPerMinute": 120,
+      "dailyLimitUnits": "3000000"
+    }
+  ],
+  "models": [
+    {
+      "id": "gpt-6-luna",
+      "provider": "openai",
+      "upstreamModel": "gpt-6-luna",
+      "displayName": "GPT-6 Luna",
+      "enabled": true,
+      "pricingReviewed": true,
+      "roles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "recommendedRoles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 922000,
+      "maxOutput": 8192,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 2,
+      "supports": {
+        "tools": true,
+        "vision": true,
+        "promptCache": true,
+        "reasoning": true,
+        "nativeSearch": true
+      },
+      "rates": {
+        "input": "200000",
+        "cachedInput": "20000",
+        "cacheWrite5m": "250000",
+        "cacheWrite1h": "250000",
+        "output": "750000",
+        "searchCall": "10000"
+      },
+      "pricingSource": "https://developers.openai.com/api/docs/pricing \u2014 2026-10-18 standard long-context ceiling; conservative staging tariff, not production pricing",
+      "description": "Provider-native GPT-6 Luna access.",
+      "tier": "fast",
+      "maxDurationMs": 600000,
+      "idleTimeoutMs": 90000,
+      "costRates": {
+        "input": "200000",
+        "cachedInput": "20000",
+        "cacheWrite5m": "250000",
+        "cacheWrite1h": "250000",
+        "output": "750000",
+        "searchCall": "10000"
+      }
+    },
+    {
+      "id": "gpt-4o-mini-transcribe",
+      "provider": "openai",
+      "upstreamModel": "gpt-4o-mini-transcribe",
+      "displayName": "gpt-4o-mini-transcribe",
+      "description": "Dictation transcription.",
+      "tier": "fast",
+      "maxDurationMs": 85000,
+      "idleTimeoutMs": 85000,
+      "enabled": true,
+      "pricingReviewed": true,
+      "roles": [
+        "transcribe"
+      ],
+      "recommendedRoles": [
+        "transcribe"
+      ],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 16000,
+      "maxOutput": 2000,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 0,
+      "supports": {
+        "tools": false,
+        "vision": false,
+        "promptCache": false,
+        "reasoning": false,
+        "nativeSearch": false
+      },
+      "rates": {
+        "input": "1250000",
+        "cachedInput": "1250000",
+        "cacheWrite5m": "1250000",
+        "cacheWrite1h": "1250000",
+        "output": "5000000",
+        "searchCall": "0",
+        "audioInput": "1250000",
+        "audioMinute": "3000"
+      },
+      "costRates": {
+        "input": "1250000",
+        "cachedInput": "1250000",
+        "cacheWrite5m": "1250000",
+        "cacheWrite1h": "1250000",
+        "output": "5000000",
+        "searchCall": "0",
+        "audioInput": "1250000",
+        "audioMinute": "3000"
+      },
+      "pricingSource": "https://developers.openai.com/api/docs/pricing \u2014 2026-10-18; successful missing-usage duration tariff is explicit, not a token estimate"
+    },
+    {
+      "id": "gpt-4o-transcribe",
+      "provider": "openai",
+      "upstreamModel": "gpt-4o-transcribe",
+      "displayName": "gpt-4o-transcribe",
+      "description": "Dictation transcription.",
+      "tier": "balanced",
+      "maxDurationMs": 85000,
+      "idleTimeoutMs": 85000,
+      "enabled": true,
+      "pricingReviewed": true,
+      "roles": [
+        "transcribe"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "pro"
+      ],
+      "contextWindow": 16000,
+      "maxOutput": 2000,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 0,
+      "supports": {
+        "tools": false,
+        "vision": false,
+        "promptCache": false,
+        "reasoning": false,
+        "nativeSearch": false
+      },
+      "rates": {
+        "input": "2500000",
+        "cachedInput": "2500000",
+        "cacheWrite5m": "2500000",
+        "cacheWrite1h": "2500000",
+        "output": "10000000",
+        "searchCall": "0",
+        "audioInput": "2500000",
+        "audioMinute": "6000"
+      },
+      "costRates": {
+        "input": "2500000",
+        "cachedInput": "2500000",
+        "cacheWrite5m": "2500000",
+        "cacheWrite1h": "2500000",
+        "output": "10000000",
+        "searchCall": "0",
+        "audioInput": "2500000",
+        "audioMinute": "6000"
+      },
+      "pricingSource": "https://developers.openai.com/api/docs/pricing \u2014 2026-10-18; successful missing-usage duration tariff is explicit, not a token estimate"
+    }
+  ],
+  "subscriptions": [],
+  "topups": [],
+  "limits": {
+    "requestTimeoutMs": 600000,
+    "unknownHoldSeconds": 300,
+    "globalConcurrent": 32,
+    "providers": {
+      "openai": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "anthropic": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "google": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "openrouter": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "deepseek": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "typesafe": {
+        "requestsPerMinute": 1200,
+        "tokensPerSecond": 250000
+      }
+    },
+    "unconfirmedRequestsPerUserDay": 3,
+    "budgets": {
+      "scope": "staging",
+      "dailyUsdMicros": "10000000",
+      "totalUsdMicros": "50000000",
+      "freeDailyUsdMicros": "5000000"
+    },
+    "maxFreeConcurrent": 24
+  },
+  "selfHostedPlan": null,
+  "defaults": {
+    "free": {
+      "lead": "gpt-6-luna",
+      "page": "gpt-6-luna",
+      "light": "gpt-6-luna",
+      "decision": null,
+      "transcribe": "gpt-4o-mini-transcribe"
+    },
+    "pro": {
+      "lead": "gpt-6-luna",
+      "page": "gpt-6-luna",
+      "light": "gpt-6-luna",
+      "decision": null,
+      "transcribe": "gpt-4o-mini-transcribe"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@zephium/backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/apps/api/main.ts",
+    "start": "bun src/apps/api/main.ts",
+    "worker": "bun src/apps/worker/main.ts",
+    "migrate": "bun scripts/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "bun test --timeout 60000",
+    "test:api": "bun test tests/integration/api.test.ts --timeout 30000",
+    "check": "bun run architecture && bun run typecheck && bun run lint && bun run test",
+    "cloud:validate": "bun scripts/cloud-policy.ts validate",
+    "cloud:register": "bun scripts/cloud-policy.ts register",
+    "architecture": "bun scripts/check-architecture.ts"
+  },
+  "dependencies": {
+    "@polar-sh/sdk": "0.49.0",
+    "better-auth": "1.7.3",
+    "drizzle-orm": "0.45.2",
+    "hono": "4.13.7",
+    "postgres": "3.4.9",
+    "resend": "6.26.0",
+    "standardwebhooks": "1.1.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/bun": "1.4.1",
+    "bun": "1.4.2",
+    "drizzle-kit": "0.31.10",
+    "embedded-postgres": "18.4.0-beta.17",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": "1.4.2"
+  },
+  "trustedDependencies": [
+    "@embedded-postgres/darwin-arm64",
+    "@embedded-postgres/darwin-x64",
+    "@embedded-postgres/linux-arm64",
+    "@embedded-postgres/linux-x64",
+    "bun"
+  ],
+  "license": "AGPL-3.0-only"
+}

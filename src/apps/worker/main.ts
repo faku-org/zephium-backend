@@ -1,0 +1,104 @@
+import { rename, writeFile } from "node:fs/promises";
+import { cleanup, polarProvider, processOrder, workOnce } from "../../modules/billing";
+import { budgetNearLimit, exportUsage, recoverRequests } from "../../modules/credits";
+import { assertActivePolicy, loadPolicy } from "../../modules/policy";
+import { readWorkerConfig } from "../../platform/config";
+import { createDatabase } from "../../platform/db";
+import { operationalEvent } from "../../platform/errors";
+
+const config = readWorkerConfig();
+const db = createDatabase(config);
+const provider = polarProvider(config);
+const ingestUsage = provider.ingestUsage?.bind(provider);
+const policy = await loadPolicy(config.CLOUD_CONFIG_PATH);
+if (config.DEPLOYMENT_MODE === "hosted" && policy.selfHostedPlan)
+  throw new Error("Hosted deployment cannot select a self-hosted plan");
+await assertActivePolicy(db, policy);
+const products = [
+  ...policy.subscriptions.map((p) => p.productId),
+  config.POLAR_MONTHLY_PRODUCT_ID,
+  config.POLAR_YEARLY_PRODUCT_ID,
+].filter((v): v is string => !!v);
+const ranks = Object.fromEntries(
+  policy.subscriptions.map((s) => [
+    s.productId,
+    policy.plans.find((p) => p.id === s.plan)?.rank ?? 0,
+  ]),
+);
+let stopped = false;
+let lastCleanup = 0;
+let lastHealth = 0;
+let lastAlert = 0;
+let lastRecovery = 0;
+if (
+  config.NODE_ENV === "production" &&
+  config.DEPLOYMENT_MODE === "hosted" &&
+  !config.OPERATIONS_WEBHOOK
+)
+  throw new Error("Worker requires an operational alert destination");
+process.once("SIGTERM", () => {
+  stopped = true;
+});
+process.once("SIGINT", () => {
+  stopped = true;
+});
+try {
+  while (!stopped) {
+    try {
+      const [current] = await db.sql`SELECT revision FROM cloud_active_policy WHERE singleton=true`;
+      if (current?.revision !== policy.revision) {
+        operationalEvent("cloud_policy_restart_required");
+        process.exitCode = 1;
+        break;
+      }
+      if (Date.now() - lastHealth > 60_000) {
+        const [status] =
+          await db.sql`SELECT EXISTS(SELECT 1 FROM billing_customer WHERE attempts >= 10) OR EXISTS(SELECT 1 FROM billing_order_job WHERE attempts>=10 AND requested>processed) OR EXISTS(SELECT 1 FROM cloud_outbox WHERE attempts>=10 AND delivered_at IS NULL) AS exhausted`;
+        const health = { time: Date.now(), ready: !status?.exhausted };
+        await writeFile("/tmp/zephium-worker-health.tmp", JSON.stringify(health), { mode: 0o600 });
+        await rename("/tmp/zephium-worker-health.tmp", "/tmp/zephium-worker-health.json");
+        lastHealth = Date.now();
+        const budgetWarning = await budgetNearLimit(db, policy);
+        if (
+          (status?.exhausted || budgetWarning) &&
+          config.OPERATIONS_WEBHOOK &&
+          Date.now() - lastAlert > 3600_000
+        ) {
+          const response = await fetch(config.OPERATIONS_WEBHOOK, {
+            method: "POST",
+            redirect: "error",
+            signal: AbortSignal.timeout(5000),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: status?.exhausted
+                ? "Zephium billing work requires operator attention"
+                : "Zephium cloud spending is near a configured safety limit",
+            }),
+          });
+          await response.body?.cancel();
+          if (!response.ok) throw new Error("Operational alert failed");
+          lastAlert = Date.now();
+        }
+      }
+      if (Date.now() - lastCleanup > 3600_000) {
+        await cleanup(db);
+        lastCleanup = Date.now();
+      }
+      if (Date.now() - lastRecovery > 5000) {
+        await recoverRequests(db);
+        lastRecovery = Date.now();
+      }
+      const orderWorked = config.POLAR_ACCESS_TOKEN
+        ? await processOrder(db, policy, provider)
+        : false;
+      const exported = config.POLAR_ACCESS_TOKEN ? await exportUsage(db, ingestUsage) : false;
+      const reconciled = await workOnce(db, provider, products, ranks);
+      if (orderWorked || exported || reconciled) continue;
+    } catch {
+      operationalEvent("worker_iteration_failed");
+    }
+    await Bun.sleep(1000);
+  }
+} finally {
+  await db.close();
+}

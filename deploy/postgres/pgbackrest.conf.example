@@ -1,0 +1,21 @@
+[global]
+repo1-type=s3
+repo1-path=/zephium/postgres
+repo1-s3-endpoint=ACCOUNT_ID.r2.cloudflarestorage.com
+repo1-s3-bucket=zephium-backups
+repo1-s3-region=auto
+repo1-s3-uri-style=path
+repo1-retention-full=5
+repo1-retention-diff=30
+repo1-cipher-type=aes-256-cbc
+# Supply repo1-s3-key, repo1-s3-key-secret and repo1-cipher-pass via a 0600 secret config.
+start-fast=y
+archive-async=n
+log-level-console=warn
+log-level-file=off
+process-max=2
+
+[zephium]
+# Match the database bootstrap owner; the container OS user is postgres.
+pg1-user=zephium_owner
+pg1-path=/var/lib/postgresql/18/docker

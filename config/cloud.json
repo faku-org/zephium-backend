@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "revision": 3,
+  "enabled": false,
+  "freePlan": "free",
+  "welcomeUnits": "0",
+  "welcomeExpiresDays": null,
+  "plans": [
+    {
+      "id": "free",
+      "rank": 0,
+      "allowanceUnits": "0",
+      "cycle": {
+        "kind": "once"
+      },
+      "maxConcurrent": 8,
+      "requestsPerMinute": 120,
+      "dailyLimitUnits": null
+    },
+    {
+      "id": "pro",
+      "rank": 1,
+      "allowanceUnits": "0",
+      "cycle": {
+        "kind": "calendar_month"
+      },
+      "maxConcurrent": 12,
+      "requestsPerMinute": 120,
+      "dailyLimitUnits": null
+    }
+  ],
+  "models": [
+    {
+      "id": "gpt-6-luna",
+      "provider": "openai",
+      "upstreamModel": "gpt-6-luna",
+      "displayName": "GPT-6 Luna",
+      "enabled": false,
+      "pricingReviewed": false,
+      "roles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 272000,
+      "maxOutput": 8192,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 2,
+      "supports": {
+        "tools": true,
+        "vision": true,
+        "promptCache": true,
+        "reasoning": true,
+        "nativeSearch": true
+      },
+      "rates": {
+        "input": "100000",
+        "cachedInput": "10000",
+        "cacheWrite5m": "125000",
+        "cacheWrite1h": "125000",
+        "output": "500000",
+        "searchCall": "10000"
+      },
+      "pricingSource": "https://developers.openai.com/api/docs/models/gpt-6-luna \u2014 reference rates only; choose Zephium credit pricing before enabling",
+      "description": "Provider-native GPT-6 Luna access.",
+      "tier": "fast",
+      "maxDurationMs": 600000,
+      "idleTimeoutMs": 90000
+    },
+    {
+      "id": "claude-configure",
+      "provider": "anthropic",
+      "upstreamModel": "replace-with-reviewed-model",
+      "displayName": "Configure Anthropic model",
+      "enabled": false,
+      "pricingReviewed": false,
+      "roles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 200000,
+      "maxOutput": 8192,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 2,
+      "supports": {
+        "tools": true,
+        "vision": true,
+        "promptCache": true,
+        "reasoning": true,
+        "nativeSearch": true
+      },
+      "rates": {
+        "input": "0",
+        "cachedInput": "0",
+        "cacheWrite5m": "0",
+        "cacheWrite1h": "0",
+        "output": "0",
+        "searchCall": "0"
+      },
+      "pricingSource": "Owner must review current provider pricing before activation",
+      "description": "Provider-native Configure Anthropic model access.",
+      "tier": "balanced",
+      "maxDurationMs": 600000,
+      "idleTimeoutMs": 90000
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "provider": "google",
+      "upstreamModel": "gemini-3.8-flash",
+      "displayName": "Gemini 3.8 Flash",
+      "enabled": false,
+      "pricingReviewed": false,
+      "roles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 1000000,
+      "maxOutput": 8192,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 0,
+      "supports": {
+        "tools": true,
+        "vision": true,
+        "promptCache": true,
+        "reasoning": true,
+        "nativeSearch": false
+      },
+      "rates": {
+        "input": "0",
+        "cachedInput": "0",
+        "cacheWrite5m": "0",
+        "cacheWrite1h": "0",
+        "output": "0",
+        "searchCall": "0"
+      },
+      "pricingSource": "Owner must review current provider pricing before activation",
+      "description": "Provider-native Gemini 3.8 Flash access.",
+      "tier": "fast",
+      "maxDurationMs": 600000,
+      "idleTimeoutMs": 90000
+    },
+    {
+      "id": "openrouter-configure",
+      "provider": "openrouter",
+      "upstreamModel": "replace-with-reviewed-provider/model",
+      "displayName": "Configure OpenRouter model",
+      "enabled": false,
+      "pricingReviewed": false,
+      "roles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 128000,
+      "maxOutput": 8192,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 0,
+      "supports": {
+        "tools": true,
+        "vision": false,
+        "promptCache": true,
+        "reasoning": true,
+        "nativeSearch": false
+      },
+      "rates": {
+        "input": "0",
+        "cachedInput": "0",
+        "cacheWrite5m": "0",
+        "cacheWrite1h": "0",
+        "output": "0",
+        "searchCall": "0"
+      },
+      "pricingSource": "Owner must review current provider pricing before activation",
+      "description": "Provider-native Configure OpenRouter model access.",
+      "tier": "balanced",
+      "maxDurationMs": 600000,
+      "idleTimeoutMs": 90000
+    },
+    {
+      "id": "deepseek-configure",
+      "provider": "deepseek",
+      "upstreamModel": "replace-with-reviewed-model",
+      "displayName": "Configure DeepSeek model",
+      "enabled": false,
+      "pricingReviewed": false,
+      "roles": [
+        "lead",
+        "page",
+        "light"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 128000,
+      "maxOutput": 8192,
+      "maxRequestBytes": 8388608,
+      "maxSearchCalls": 0,
+      "supports": {
+        "tools": true,
+        "vision": false,
+        "promptCache": true,
+        "reasoning": true,
+        "nativeSearch": false
+      },
+      "rates": {
+        "input": "0",
+        "cachedInput": "0",
+        "cacheWrite5m": "0",
+        "cacheWrite1h": "0",
+        "output": "0",
+        "searchCall": "0"
+      },
+      "pricingSource": "Owner must review current provider pricing before activation",
+      "description": "Provider-native Configure DeepSeek model access.",
+      "tier": "fast",
+      "maxDurationMs": 600000,
+      "idleTimeoutMs": 90000
+    },
+    {
+      "id": "jev-1.13.0",
+      "provider": "typesafe",
+      "upstreamModel": "jev-1.13.0",
+      "displayName": "Jev 1.13",
+      "enabled": false,
+      "pricingReviewed": false,
+      "roles": [
+        "decision"
+      ],
+      "recommendedRoles": [],
+      "plans": [
+        "free",
+        "pro"
+      ],
+      "contextWindow": 64000,
+      "maxOutput": 1,
+      "maxRequestBytes": 81920,
+      "maxSearchCalls": 0,
+      "supports": {
+        "tools": false,
+        "vision": false,
+        "promptCache": false,
+        "reasoning": false,
+        "nativeSearch": false
+      },
+      "rates": {
+        "input": "42000",
+        "cachedInput": "42000",
+        "cacheWrite5m": "42000",
+        "cacheWrite1h": "42000",
+        "output": "0",
+        "searchCall": "0"
+      },
+      "pricingSource": "https://docs.typesafe.ai/models \u2014 reference rates only; choose Zephium credit pricing before enabling",
+      "description": "Provider-native Jev 1.13 access.",
+      "tier": "fast",
+      "maxDurationMs": 14000,
+      "idleTimeoutMs": 14000
+    }
+  ],
+  "subscriptions": [],
+  "topups": [],
+  "limits": {
+    "requestTimeoutMs": 600000,
+    "unknownHoldSeconds": 300,
+    "globalConcurrent": 32,
+    "providers": {
+      "openai": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "anthropic": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "google": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "openrouter": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "deepseek": {
+        "requestsPerMinute": 300,
+        "tokensPerSecond": 1000000
+      },
+      "typesafe": {
+        "requestsPerMinute": 1200,
+        "tokensPerSecond": 250000
+      }
+    },
+    "unconfirmedRequestsPerUserDay": 3,
+    "budgets": {
+      "scope": "production",
+      "dailyUsdMicros": "0",
+      "totalUsdMicros": null,
+      "freeDailyUsdMicros": "0"
+    },
+    "maxFreeConcurrent": 24
+  },
+  "selfHostedPlan": null,
+  "defaults": {
+    "free": {
+      "lead": "gpt-6-luna",
+      "page": "gpt-6-luna",
+      "light": "gpt-6-luna",
+      "decision": null,
+      "transcribe": null
+    },
+    "pro": {
+      "lead": "gpt-6-luna",
+      "page": "gpt-6-luna",
+      "light": "gpt-6-luna",
+      "decision": null,
+      "transcribe": null
+    }
+  }
+}
