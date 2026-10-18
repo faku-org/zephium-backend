@@ -73,6 +73,8 @@ function openAI(value: unknown, nativeSearch: boolean, observed?: Set<string>): 
       const id = field(item, "id");
       const action = field(field(item, "action"), "type");
       if (typeof id !== "string" || !id || typeof action !== "string") return null;
+      // Only the final completed item confirms that the search action finished.
+      if (field(item, "status") !== "completed") return null;
       if (action === "search") ids.add(id);
       // Only search-action pricing is documented unambiguously. Do not assume
       // page-open/find actions are free; ambiguous fees use hold-and-refund recovery.

@@ -22,8 +22,13 @@ test("OpenAI completed usage partitions cache and deduplicates final search call
   const response = {
     status: "completed",
     output: [
-      { type: "web_search_call", id: "ws1", action: { type: "search", queries: ["a", "b"] } },
-      { type: "web_search_call", id: "ws1", action: { type: "search" } },
+      {
+        type: "web_search_call",
+        id: "ws1",
+        status: "completed",
+        action: { type: "search", queries: ["a", "b"] },
+      },
+      { type: "web_search_call", id: "ws1", status: "completed", action: { type: "search" } },
     ],
     usage: {
       input_tokens: 100,
@@ -48,7 +53,12 @@ test("OpenAI completed usage partitions cache and deduplicates final search call
       ...response,
       output: [
         ...response.output,
-        { type: "web_search_call", id: "ws2", action: { type: action } },
+        {
+          type: "web_search_call",
+          id: "ws2",
+          status: "completed",
+          action: { type: action },
+        },
       ],
     };
     expect(extractUsage("openai", ambiguous, true)).toBeNull();
@@ -88,6 +98,41 @@ test("OpenAI completed usage partitions cache and deduplicates final search call
       true,
     ),
   ).toBeNull();
+});
+
+test("OpenAI search usage requires completed final item status", () => {
+  const completed = {
+    type: "web_search_call",
+    id: "ws1",
+    status: "completed",
+    action: { type: "search" },
+  };
+  for (const status of [undefined, "unknown", "in_progress", "searching", "failed", "incomplete"]) {
+    const ambiguous = {
+      type: "web_search_call",
+      id: "ws1",
+      action: { type: "search" },
+      ...(status === undefined ? {} : { status }),
+    };
+    const response = {
+      status: "completed",
+      // A duplicate ID must not hide an unconfirmed final item.
+      output: [completed, ambiguous],
+      usage: { input_tokens: 100, output_tokens: 20 },
+    };
+    expect(extractUsage("openai", response, true)).toBeNull();
+    // An earlier completed event cannot override the final response's item status.
+    expect(
+      observe(
+        "openai",
+        event("response.output_item.done", {
+          type: "response.output_item.done",
+          item: completed,
+        }) + event("response.completed", { type: "response.completed", response }),
+        true,
+      ),
+    ).toBeNull();
+  }
 });
 
 test("Anthropic replaces cumulative deltas and keeps cache classes disjoint", () => {
