@@ -518,3 +518,120 @@ test("a paid-only model cannot dispatch from top-up credit after paid access end
   });
   await releaseRequest(fixture.db, r.id, ctx.userId, "test_cleanup");
 });
+
+async function paidPlanTransition() {
+  const base = testPolicy();
+  const free = required(base.plans[0]);
+  const shared = { ...required(base.models[0]), plans: ["pro", "max"] };
+  const proProduct = "00000000-0000-4000-8000-000000000202";
+  const maxProduct = "00000000-0000-4000-8000-000000000203";
+  const policy = testPolicy({
+    welcomeUnits: "0",
+    plans: [
+      { ...free, cycle: { kind: "once" }, allowanceUnits: "0" },
+      { ...free, id: "pro", rank: 1, allowanceUnits: "100" },
+      { ...free, id: "max", rank: 2, allowanceUnits: "500" },
+    ],
+    subscriptions: [
+      { productId: proProduct, plan: "pro", interval: "monthly" },
+      { productId: maxProduct, plan: "max", interval: "monthly" },
+    ],
+    models: [
+      shared,
+      { ...shared, id: "max-model", upstreamModel: "synthetic-max-model", plans: ["max"] },
+    ],
+  });
+  const ctx = await setup(policy);
+  await fixture.db
+    .sql`UPDATE billing_customer SET status='active',product_id=${maxProduct},subscription_id=${crypto.randomUUID()},subscription_start=clock_timestamp(),period_start=clock_timestamp(),paid_until=clock_timestamp()+interval '30 days',reconciled_at=clock_timestamp() WHERE user_id=${ctx.userId}`;
+  return {
+    ...ctx,
+    async downgrade() {
+      await fixture.db
+        .sql`UPDATE billing_customer SET product_id=${proProduct},reconciled_at=clock_timestamp() WHERE user_id=${ctx.userId}`;
+    },
+  };
+}
+
+async function purchasedTransition() {
+  const ctx = await paidPlanTransition();
+  await applyTopup(fixture.db, ctx.policy, {
+    id: crypto.randomUUID(),
+    userId: ctx.userId,
+    productId: required(ctx.policy.topups[0]).productId,
+    paid: true,
+    refunded: false,
+    createdAt: new Date(),
+  });
+  return ctx;
+}
+
+test("a Max included reservation cannot dispatch after downgrade and releases its hold", async () => {
+  const ctx = await paidPlanTransition();
+  const r = await opened(ctx);
+  await reserveRequest(fixture.db, ctx.policy, ctx.model, r.id, ctx.userId, ctx.sessionId, 5n, 1);
+  const maxGrant = () =>
+    fixture.db
+      .sql`SELECT spent::text,held::text FROM credit_grant WHERE user_id=${ctx.userId} AND kind='included' AND plan_id='max'`;
+  expect(required((await maxGrant())[0])).toEqual({ spent: "0", held: "5" });
+  await ctx.downgrade();
+  await expect(markDispatched(fixture.db, r.id, ctx.userId, ctx.sessionId)).rejects.toMatchObject({
+    code: "request_expired",
+    status: 409,
+  });
+  const [request] = await fixture.db
+    .sql`SELECT state,dispatched_at,funding_source FROM cloud_request WHERE id=${r.id}`;
+  expect(request).toEqual({ state: "reserved", dispatched_at: null, funding_source: "allowance" });
+  await releaseRequest(fixture.db, r.id, ctx.userId, "request_expired");
+  expect(required((await maxGrant())[0])).toEqual({ spent: "0", held: "0" });
+  expect(await requestRow(r.id)).toMatchObject({ state: "released", charged: "0" });
+  expect(
+    await fixture.db.sql`SELECT request_id FROM credit_allocation WHERE request_id=${r.id}`,
+  ).toHaveLength(0);
+});
+
+test("purchased credit for a shared model remains dispatchable after Max to Pro downgrade", async () => {
+  const ctx = await purchasedTransition();
+  const r = await opened(ctx);
+  await reserveRequest(fixture.db, ctx.policy, ctx.model, r.id, ctx.userId, ctx.sessionId, 5n, 1);
+  const [request] = await fixture.db.sql`SELECT funding_source FROM cloud_request WHERE id=${r.id}`;
+  expect(request?.funding_source).toBe("purchased");
+  await ctx.downgrade();
+  await markDispatched(fixture.db, r.id, ctx.userId, ctx.sessionId);
+  await settleRequest(fixture.db, r.id, ctx.userId, { ...emptyUsage(), input: 3 }, 200, null);
+  expect(await requestRow(r.id)).toMatchObject({ state: "settled", charged: "3" });
+  const [topup] = await fixture.db
+    .sql`SELECT spent::text,held::text FROM credit_grant WHERE user_id=${ctx.userId} AND kind='topup'`;
+  expect(topup).toEqual({ spent: "3", held: "0" });
+});
+
+test("purchased credit cannot dispatch a Max-only model after downgrade", async () => {
+  const ctx = await purchasedTransition();
+  const model = required(ctx.policy.models[1]);
+  const r = await opened({ ...ctx, model });
+  await reserveRequest(fixture.db, ctx.policy, model, r.id, ctx.userId, ctx.sessionId, 5n, 1);
+  const [request] = await fixture.db.sql`SELECT funding_source FROM cloud_request WHERE id=${r.id}`;
+  expect(request?.funding_source).toBe("purchased");
+  await ctx.downgrade();
+  await expect(markDispatched(fixture.db, r.id, ctx.userId, ctx.sessionId)).rejects.toMatchObject({
+    code: "request_expired",
+    status: 409,
+  });
+  await releaseRequest(fixture.db, r.id, ctx.userId, "request_expired");
+  const [topup] = await fixture.db
+    .sql`SELECT spent::text,held::text FROM credit_grant WHERE user_id=${ctx.userId} AND kind='topup'`;
+  expect(topup).toEqual({ spent: "0", held: "0" });
+});
+
+test("a dispatched Max included reservation still settles after downgrade", async () => {
+  const ctx = await paidPlanTransition();
+  const r = await opened(ctx);
+  await reserveRequest(fixture.db, ctx.policy, ctx.model, r.id, ctx.userId, ctx.sessionId, 5n, 1);
+  await markDispatched(fixture.db, r.id, ctx.userId, ctx.sessionId);
+  await ctx.downgrade();
+  await settleRequest(fixture.db, r.id, ctx.userId, { ...emptyUsage(), input: 3 }, 200, null);
+  expect(await requestRow(r.id)).toMatchObject({ state: "settled", charged: "3" });
+  const [grant] = await fixture.db
+    .sql`SELECT spent::text,held::text FROM credit_grant WHERE user_id=${ctx.userId} AND kind='included' AND plan_id='max'`;
+  expect(grant).toEqual({ spent: "3", held: "0" });
+});

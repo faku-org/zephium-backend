@@ -280,7 +280,9 @@ export async function markDispatched(db: Database, id: string, userId: string, s
       covered !== BigInt(request.reserved) ||
       allocations.some(
         (allocation) =>
-          allocation.revoked || (allocation.expires_at && new Date(allocation.expires_at) <= now),
+          allocation.revoked ||
+          (allocation.kind === "included" && allocation.plan_id !== currentPlan) ||
+          (allocation.expires_at && new Date(allocation.expires_at) <= now),
       ) ||
       (hasPaidGrant && !paidValid)
     )

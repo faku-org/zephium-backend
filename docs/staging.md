@@ -6,7 +6,7 @@ Enter credentials directly in your password manager and Coolify's environment se
 
 ## 1. GitHub: prepare reviewed images
 
-After the source layout and initial changes are reviewed, create the backend repository in the intended organization and publish the approved source. The current checkout has not completed that publication step.
+The backend source is public at [zephium-browser/backend](https://github.com/zephium-browser/backend). Review the intended source revision before building its deployment images. Container-package visibility is configured separately; private images require registry authentication on the deployment server.
 
 In the repository's **Actions** tab, run **Check**. It includes Linux tests, encrypted-backup restoration and the self-host Compose check. Then run **Build deployment images** from `main`. That workflow requires its checks and the `container-release` environment. Save the three reported image digests: account, worker and PostgreSQL. Coolify will run those exact images rather than build on the VPS.
 
@@ -38,6 +38,10 @@ The backend's separate staging budget starts at $50 total, $10 per UTC day and $
 
 Create a separate **Docker Compose application** using [deploy/compose.staging.yaml](../deploy/compose.staging.yaml). Set only the API service's domain to `https://staging-api.zephium.app`, with internal port 3000. Keep automatic deployment off while preparing policy changes. Use a separate database volume, staging secrets and backup storage.
 
+For Coolify 4.3.23, select **Raw (deploy file as-is)**, manual deployments, and disabled previews. Its managed Compose mode injects the complete environment file into every service, which would bypass the credential boundaries declared here. Raw mode needs an explicit API-only proxy route; use the installed proxy's actual entrypoint and certificate resolver, disable access logs/tracing for this route, and preserve streaming without compression or buffering.
+
+Set `ZEPHIUM_PROXY_NETWORK` to the application's dedicated proxy network. Coolify creates a network named after the application UUID and connects its proxy to it. Do not attach this API to the shared `coolify` network: another database there can also advertise the hostname `postgres`, causing the API to authenticate against the wrong database while the worker works correctly. Verify network membership and DNS resolution before starting traffic. Set `TRUSTED_PROXY_CIDRS` to the proxy's exact addresses on that dedicated network. PostgreSQL and the worker must remain off the proxy network.
+
 Fill the [environment inventory](../deploy/staging.env.example) in Coolify:
 
 | Group | What to supply |
@@ -48,6 +52,8 @@ Fill the [environment inventory](../deploy/staging.env.example) in Coolify:
 | Access | Exact API/trusted origins, observed proxy CIDRs, approved tester email addresses |
 | Integrations | OpenAI project key, sandbox Polar token/webhook secret, deployed return URLs |
 | Operations | Public corresponding-source URL and private HTTPS alert destination |
+
+Coolify labels normal deployment values **Production** even within a staging resource. Keep preview deployments disabled; Compose-referenced preview variables may be undeletable and do not need removal. Keep generated environment files root-readable only, and inspect selected metadata rather than printing the populated Compose configuration.
 
 Use `SIGNUP_OPEN=false` initially and set `SIGNUP_EMAIL_ALLOWLIST` to exact comma-separated tester addresses. Later, setting signup open allows those approved testers to enroll. API and worker get application database credentials; only migration and policy jobs get migrator credentials. Never use the local-development database password here.
 

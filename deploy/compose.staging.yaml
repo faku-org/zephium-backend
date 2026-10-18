@@ -176,7 +176,7 @@ networks:
   egress: {}
   proxy:
     external: true
-    name: ${ZEPHIUM_PROXY_NETWORK:-coolify}
+    name: ${ZEPHIUM_PROXY_NETWORK:?Set the dedicated staging proxy network}
 
 volumes:
   postgres-data: {}
