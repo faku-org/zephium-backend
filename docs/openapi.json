@@ -1518,6 +1518,119 @@
           }
         }
       }
+    },
+    "/v1/billing/subscription/preview": {
+      "post": {
+        "summary": "Preview an existing subscription plan change without payment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "interval": {
+                    "enum": [
+                      "monthly",
+                      "yearly"
+                    ]
+                  }
+                },
+                "required": [
+                  "plan",
+                  "interval"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Caller-owned plan-change quote or durable operation receipt; this is not a payment-success signal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanChange"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/subscription/change": {
+      "post": {
+        "summary": "Confirm a quote once with a fresh session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "quote_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "quote_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Caller-owned plan-change quote or durable operation receipt; this is not a payment-success signal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanChange"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/subscription/changes/{id}": {
+      "get": {
+        "summary": "Read a caller-owned plan-change receipt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Caller-owned plan-change quote or durable operation receipt; this is not a payment-success signal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanChange"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or foreign operation"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2824,6 +2937,127 @@
         "required": [
           "requests",
           "next_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "PlanChange": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "quoted",
+              "queued",
+              "executing",
+              "uncertain",
+              "applied",
+              "scheduled",
+              "failed"
+            ]
+          },
+          "current_plan": {
+            "type": "string"
+          },
+          "target_plan": {
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "monthly",
+              "yearly"
+            ]
+          },
+          "direction": {
+            "enum": [
+              "upgrade",
+              "downgrade"
+            ]
+          },
+          "effective_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "amount_due_estimate": {
+            "type": "object",
+            "properties": {
+              "amount_minor": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "currency": {
+                "type": "string"
+              },
+              "tax_excluded": {
+                "const": true
+              }
+            },
+            "required": [
+              "amount_minor",
+              "currency",
+              "tax_excluded"
+            ],
+            "additionalProperties": false
+          },
+          "recurring_price": {
+            "type": "object",
+            "properties": {
+              "amount_minor": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "currency": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "amount_minor",
+              "currency"
+            ],
+            "additionalProperties": false
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "current_plan",
+          "target_plan",
+          "interval",
+          "direction",
+          "effective_at",
+          "amount_due_estimate",
+          "recurring_price",
+          "expires_at",
+          "error"
         ],
         "additionalProperties": false
       }

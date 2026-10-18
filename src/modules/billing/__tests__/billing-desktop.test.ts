@@ -436,3 +436,81 @@ test("lost checkout responses retain intent and deletion rechecks remote open ch
   expect(deleted).toBe(false);
   expect((await fixture.db.sql`SELECT id FROM auth_user WHERE id=${userId}`).length).toBe(1);
 });
+
+test("expired local billing cannot create a second subscription after remote renewal", async () => {
+  const { userId } = await createCloudAccount(fixture.db);
+  const policy = testPolicy();
+  await registerPolicy(fixture.db, policy);
+  await fixture.db
+    .sql`UPDATE billing_customer SET subscription_id='existing',paid_until=now()-interval '1 day' WHERE user_id=${userId}`;
+  let created = false;
+  const service = createBillingService(
+    enabledConfig(),
+    fixture.db,
+    provider({
+      state: async () => ({
+        accountId: userId,
+        customerId: "customer",
+        subscriptions: [
+          {
+            id: "existing",
+            productId,
+            status: "active",
+            paidUntil: new Date(Date.now() + 86400000),
+            cancelAtPeriodEnd: false,
+          },
+        ],
+      }),
+      checkout: async () => {
+        created = true;
+        throw new Error("Unexpected duplicate checkout");
+      },
+    }),
+    policy,
+  );
+  await expect(
+    service.checkout(userId, "synthetic@example.test", productId, {
+      kind: "subscription",
+      interval: "monthly",
+    }),
+  ).rejects.toMatchObject({ code: "subscription_change_required", status: 409 });
+  expect(created).toBe(false);
+});
+
+test("lost subscription checkout response prevents concurrent or repeated creation", async () => {
+  const { userId } = await createCloudAccount(fixture.db);
+  const policy = testPolicy();
+  await registerPolicy(fixture.db, policy);
+  let calls = 0;
+  const service = createBillingService(
+    enabledConfig(),
+    fixture.db,
+    provider({
+      checkout: async () => {
+        calls++;
+        throw new Error("Lost checkout response");
+      },
+    }),
+    policy,
+  );
+  const results = await Promise.allSettled(
+    Array.from({ length: 3 }, () =>
+      service.checkout(userId, "synthetic@example.test", productId, {
+        kind: "subscription",
+        interval: "monthly",
+      }),
+    ),
+  );
+  expect(calls).toBe(1);
+  expect(
+    results.filter((r) => r.status === "rejected" && r.reason.code === "checkout_in_progress")
+      .length,
+  ).toBe(2);
+  await expect(
+    service.checkout(userId, "synthetic@example.test", productId, {
+      kind: "subscription",
+      interval: "monthly",
+    }),
+  ).rejects.toMatchObject({ code: "checkout_in_progress" });
+  expect(calls).toBe(1);
+});

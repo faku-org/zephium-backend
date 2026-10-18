@@ -48,6 +48,7 @@ export const creditGrant = pgTable(
       .notNull()
       .references(() => cloudPolicy.revision),
     planId: text("plan_id"),
+    allowanceBasis: bigint("allowance_basis", { mode: "bigint" }),
     amount: bigint("amount", { mode: "bigint" }).notNull(),
     spent: bigint("spent", { mode: "bigint" }).notNull().default(0n),
     held: bigint("held", { mode: "bigint" }).notNull().default(0n),
@@ -60,6 +61,7 @@ export const creditGrant = pgTable(
     unique("credit_grant_user_id_grant_key_key").on(t.userId, t.grantKey),
     index("credit_grant_owner").on(t.userId, t.expiresAt),
     check("credit_grant_kind_check", sql`${t.kind} in ('welcome', 'included', 'topup')`),
+    check("credit_grant_allowance_basis_check", sql`${t.allowanceBasis} >= 0`),
     check("credit_grant_amount_check", sql`${t.amount} >= 0`),
     check("credit_grant_spent_check", sql`${t.spent} >= 0`),
     check("credit_grant_held_check", sql`${t.held} >= 0`),

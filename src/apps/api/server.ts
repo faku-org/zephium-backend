@@ -47,6 +47,10 @@ export function createApiServer(
         peers.set(forwarded, peer);
         markIncomingStart(forwarded, startedAt);
         if (generation) owner.timeout(request, 0);
+        // Subscription checkout performs two separately bounded provider operations
+        // (current-state read, then creation). Keep a finite transport deadline.
+        else if (request.method === "POST" && path === "/v1/billing/checkout")
+          owner.timeout(request, 30);
         return await app.fetch(forwarded);
       } catch (error) {
         return errorResponse(error instanceof AppError ? error : new AppError("unavailable", 503));

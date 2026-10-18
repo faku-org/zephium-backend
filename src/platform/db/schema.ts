@@ -5,6 +5,7 @@ export {
   billingCheckout,
   billingOrderJob,
   billingOrderReversal,
+  billingPlanChange,
 } from "../../modules/billing/schema";
 export {
   cloudCostRecord,

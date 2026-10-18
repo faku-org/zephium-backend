@@ -6,6 +6,7 @@ import {
   cleanupExpiredSessions,
   purgeAccount,
 } from "../identity";
+import { pendingPlanChange } from "./plan-changes";
 import type { BillingProvider } from "./provider";
 import { subscriptionDecision } from "./service";
 
@@ -20,10 +21,13 @@ export async function workOnce(
     const [row] =
       await tx`SELECT b.*, u.lifecycle, u.email FROM billing_customer b JOIN auth_user u ON u.id=b.user_id
       WHERE b.next_attempt <= now() AND b.attempts < 10 AND
+      NOT EXISTS(SELECT 1 FROM billing_plan_change c WHERE c.user_id=b.user_id AND c.state IN ('queued','executing','uncertain')) AND
       (b.provider_touched OR u.lifecycle='deleting') AND
       (u.lifecycle='deleting' OR b.requested > b.processed OR b.reconciled_at IS NULL OR b.reconciled_at < now()-interval '15 minutes')
       ORDER BY b.next_attempt FOR UPDATE OF b SKIP LOCKED LIMIT 1`;
     if (!row) return false;
+    // Recheck using a new READ COMMITTED snapshot after acquiring the billing lock.
+    if (await pendingPlanChange(tx, row.user_id)) return false;
     try {
       if (row.lifecycle === "deleting") {
         const [pending] =
@@ -68,6 +72,7 @@ export async function workOnce(
   }) as Promise<boolean>;
 }
 export async function cleanup(db: Database) {
+  await db.sql`DELETE FROM billing_plan_change WHERE state='quoted' AND created_at<now()-interval '1 day'`;
   await cleanupExpiredActionCodes(db.sql);
   await db.sql`DELETE FROM abuse_bucket WHERE expires_at < now()-interval '1 hour'`;
   await cleanupExpiredAuthCodes(db.sql);

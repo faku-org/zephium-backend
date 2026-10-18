@@ -17,4 +17,4 @@ export {
   purgeAccount,
 } from "./maintenance";
 export { createIdentityRoutes } from "./routes";
-export { authenticate } from "./session";
+export { assertMutationSession, authenticate } from "./session";

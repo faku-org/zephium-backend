@@ -30,6 +30,9 @@ These routes require a verified, active session. Session IDs are scoped to the c
 | GET `/v1/billing` | — | Reconciled subscription, paid flag, capabilities, and priced offers |
 | POST `/v1/billing/refresh` | Empty body | Same shape after bounded provider reconciliation; at most six times per minute per user |
 | POST `/v1/billing/checkout` | `{"interval":"monthly"|"yearly","plan"?:"plan-id"}` or `{"topup":"topup-id"}` | `{url}` for a caller-bound Polar checkout |
+| POST `/v1/billing/subscription/preview` | `{plan,interval}` | Caller-owned five-minute quote; no payment |
+| POST `/v1/billing/subscription/change` | `{quote_id}` | 202 operation receipt; fresh session required for first confirmation |
+| GET `/v1/billing/subscription/changes/{id}` | No body | Caller-owned operation receipt; unknown/foreign IDs return 404 |
 | POST `/v1/billing/portal` | Empty body | `{url}`; 409 `no_billing_account` if no Polar customer exists |
 
 When `BILLING_ENABLED=false`, billing returns `offers:null`, `subscription.status:"not_applicable"`, and `paid:false`; portal and checkout reject. An enabled self-hosted cloud policy can still report `capabilities.hostedAI:true` while billing is disabled. Enabled offers contain `unit_scale:1000000`, subscription entries `{plan,interval,product_name,price:{amount_minor,currency}}`, and top-ups `{id,units,expires_days,product_name,price}`. Prices come from Polar's active fixed-price product data, cached briefly; invalid, archived, metered, or wrong-cadence products fail closed. A `price.amount_minor` is an integer in the displayed currency's minor unit. Do not derive a price from credit units or fixtures.
@@ -85,3 +88,15 @@ GET `/v1/source` is public and returns `{license:"AGPL-3.0-only",source_url:stri
 ## Release additions
 
 See [desktop-integration.md](desktop-integration.md#release-contract-changes--2026-10-18) and the updated OpenAPI transcription operation for the exact voice, nullable allowance renewal, funding, signup-mode and error changes. Authentication sends await bounded delivery acceptance; they do not queue unbounded or store plaintext mail.
+
+## Subscription plan changes
+
+Initial subscriptions use checkout. An existing subscription uses preview then explicit confirmation, never a second checkout. Upgrades charge the prorated price difference through Polar's `invoice` behavior; downgrades use `next_period`. Changing cadence, discounted subscriptions, pending changes, and scheduled cancellation are not accepted by this flow. The customer must resolve those conditions before previewing again. Only configured products marked checkout-enabled are selectable.
+
+A quote/receipt is `{id,status,current_plan,target_plan,interval,direction,effective_at,amount_due_estimate:{amount_minor,currency,tax_excluded:true},recurring_price:{amount_minor,currency},expires_at,error:null|{code}}`. The immediate-charge figure is an estimate before tax; Polar determines the final prorated charge. `effective_at` is null for an immediate upgrade and the renewal timestamp for a downgrade. `expires_at` limits confirmation, not the lifetime of an already submitted operation.
+
+Statuses: `quoted`, `queued`, `executing`, `uncertain`, `applied`, `scheduled`, `failed`. Confirmation requires a session created within ten minutes and uses the quote UUID as its durable idempotency key. Repeating confirmation returns the existing receipt. A queued operation is not payment success. Poll the receipt; after `applied` or `scheduled`, refresh billing and usage. `scheduled` records Polar's acceptance of a renewal change; current entitlement still comes from the reconciled subscription. An operator or customer cancellation at Polar can supersede it.
+
+`uncertain` means the payment result is not confirmed. Do not submit another quote/payment; the worker reads authoritative state without retrying the charge. A failed operation's `error.code` is part of the receipt (HTTP 200/202), not a new HTTP error. `payment_failed` grants no additional allowance. An upgrade preserves the existing monthly allowance period, consumed units and holds, adding only the remaining-period difference. Annual subscriptions still have monthly allowance periods.
+
+New HTTP errors: 400 `invalid_plan_change`; 404 `plan_change_not_found`; 409 `subscription_change_required`, `checkout_in_progress`, `billing_refresh_required`, `subscription_change_unavailable`, `plan_change_in_progress`, `plan_change_expired`; existing 401 `reauthentication_required`, 429 `rate_limited`, and 503 provider/configuration errors still apply. Preview is limited to six requests per minute per user. `billing_refresh_required` asks the client to refresh billing before trying again. Subscription checkout creation checks current provider state, and unresolved checkout creation blocks another subscription attempt rather than risking duplication.

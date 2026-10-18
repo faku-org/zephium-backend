@@ -4,6 +4,7 @@ import type { Database, Tx } from "../../platform/db";
 import { AppError } from "../../platform/errors";
 import { applyTopup } from "../credits";
 import type { CloudPolicy } from "../policy";
+import { createPlanChangeService, pendingPlanChange } from "./plan-changes";
 import type {
   BillingOrder,
   BillingProvider,
@@ -203,14 +204,42 @@ export function createBillingService(
 
   async function checkout(userId: string, email: string, productId: string, purchase: Purchase) {
     if (!enabled) throw new AppError("billing_not_enabled", 503);
+    if (purchase.kind === "subscription") {
+      // Expired local state may be an auto-renewed subscription. Never create another
+      // subscription based only on a stale local projection or an organization setting.
+      let state: CustomerState | null;
+      try {
+        state = await provider.state(userId);
+      } catch (error) {
+        providerFailure(error);
+      }
+      if (state && state.accountId !== userId)
+        throw new AppError("provider_identity_mismatch", 503);
+      if (state?.subscriptions.length) throw new AppError("subscription_change_required", 409);
+    }
     // Commit the deletion barrier before remote mutation. A lost create response is
     // recovered by the worker's open-checkout listing after this conservative horizon.
     await db.sql.begin(async (tx) => {
-      const [billing] =
-        await tx`SELECT user_id FROM billing_customer WHERE user_id=${userId} FOR UPDATE`;
+      const [billing] = await tx`SELECT * FROM billing_customer WHERE user_id=${userId} FOR UPDATE`;
       const [account] = await tx`SELECT lifecycle FROM auth_user WHERE id=${userId}`;
       if (!billing || account?.lifecycle !== "active")
         throw new AppError("account_unavailable", 403);
+      if (purchase.kind === "subscription") {
+        if (
+          billing.subscription_id &&
+          billing.paid_until &&
+          new Date(billing.paid_until) > new Date()
+        )
+          throw new AppError("subscription_change_required", 409);
+        if (await pendingPlanChange(tx, userId)) throw new AppError("plan_change_in_progress", 409);
+        const [clock] = await tx`SELECT clock_timestamp() AS db_now`;
+        if (
+          billing.subscription_checkout_until &&
+          new Date(billing.subscription_checkout_until) > new Date(clock?.db_now)
+        )
+          throw new AppError("checkout_in_progress", 409);
+        await tx`UPDATE billing_customer SET subscription_checkout_until=clock_timestamp()+interval '24 hours' WHERE user_id=${userId}`;
+      }
       if (policy) {
         const [active] = await tx`SELECT revision FROM cloud_active_policy WHERE singleton=true`;
         if (active?.revision !== policy.revision) throw new AppError("cloud_policy_changed", 503);
@@ -225,6 +254,8 @@ export function createBillingService(
       const [account] = await tx`SELECT lifecycle FROM auth_user WHERE id=${userId}`;
       if (account?.lifecycle !== "active") throw new AppError("account_unavailable", 403);
       await recordCheckout(userId, result, productId, policy?.revision, purchase, tx);
+      if (purchase.kind === "subscription")
+        await tx`UPDATE billing_customer SET subscription_checkout_until=${result.expiresAt.toISOString()} WHERE user_id=${userId}`;
       await tx`UPDATE billing_customer SET
         checkout_until=greatest(checkout_until,${result.expiresAt.toISOString()}::timestamptz),
         requested=requested+1,next_attempt=now() WHERE user_id=${userId}`;
@@ -296,6 +327,8 @@ export function createBillingService(
       const [current] =
         await tx`SELECT b.requested,b.reconciled_at,u.lifecycle FROM billing_customer b JOIN auth_user u ON u.id=b.user_id WHERE b.user_id=${userId} FOR UPDATE OF b`;
       if (current?.lifecycle !== "active") throw new AppError("account_unavailable", 403);
+      // A managed change owns subscription projection until its charge outcome is known.
+      if (await pendingPlanChange(tx, userId)) return;
       // A webhook or worker result that arrived during provider I/O has priority.
       if (
         current.requested !== before.requested ||
@@ -328,7 +361,15 @@ export function createBillingService(
     }
   }
 
-  return { get, refresh, portal, recordCheckout, checkout, startCheckout };
+  return {
+    get,
+    refresh,
+    portal,
+    recordCheckout,
+    checkout,
+    startCheckout,
+    planChanges: createPlanChangeService(db, provider, policy, config),
+  };
 }
 
 export type BillingService = ReturnType<typeof createBillingService>;

@@ -1,5 +1,11 @@
 import { rename, writeFile } from "node:fs/promises";
-import { cleanup, polarProvider, processOrder, workOnce } from "../../modules/billing";
+import {
+  cleanup,
+  polarProvider,
+  processOrder,
+  processPlanChange,
+  workOnce,
+} from "../../modules/billing";
 import { budgetNearLimit, exportUsage, recoverRequests } from "../../modules/credits";
 import { assertActivePolicy, loadPolicy } from "../../modules/policy";
 import { readWorkerConfig } from "../../platform/config";
@@ -53,7 +59,7 @@ try {
       }
       if (Date.now() - lastHealth > 60_000) {
         const [status] =
-          await db.sql`SELECT EXISTS(SELECT 1 FROM billing_customer WHERE attempts >= 10) OR EXISTS(SELECT 1 FROM billing_order_job WHERE attempts>=10 AND requested>processed) OR EXISTS(SELECT 1 FROM cloud_outbox WHERE attempts>=10 AND delivered_at IS NULL) AS exhausted`;
+          await db.sql`SELECT EXISTS(SELECT 1 FROM billing_plan_change WHERE attempts>=10 AND state IN ('executing','uncertain')) OR EXISTS(SELECT 1 FROM billing_customer WHERE attempts >= 10) OR EXISTS(SELECT 1 FROM billing_order_job WHERE attempts>=10 AND requested>processed) OR EXISTS(SELECT 1 FROM cloud_outbox WHERE attempts>=10 AND delivered_at IS NULL) AS exhausted`;
         const health = { time: Date.now(), ready: !status?.exhausted };
         await writeFile("/tmp/zephium-worker-health.tmp", JSON.stringify(health), { mode: 0o600 });
         await rename("/tmp/zephium-worker-health.tmp", "/tmp/zephium-worker-health.json");
@@ -88,12 +94,15 @@ try {
         await recoverRequests(db);
         lastRecovery = Date.now();
       }
+      const planChanged = config.POLAR_ACCESS_TOKEN
+        ? await processPlanChange(db, provider, policy)
+        : false;
       const orderWorked = config.POLAR_ACCESS_TOKEN
         ? await processOrder(db, policy, provider)
         : false;
       const exported = config.POLAR_ACCESS_TOKEN ? await exportUsage(db, ingestUsage) : false;
       const reconciled = await workOnce(db, provider, products, ranks);
-      if (orderWorked || exported || reconciled) continue;
+      if (planChanged || orderWorked || exported || reconciled) continue;
     } catch {
       operationalEvent("worker_iteration_failed");
     }

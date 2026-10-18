@@ -53,6 +53,32 @@ export function createBillingRoutes(
     const result = await service.startCheckout(user.id, user.email, selection);
     return c.json({ url: result.url });
   });
+  router.post("/v1/billing/subscription/preview", async (c) => {
+    if (config.BILLING_ENABLED !== "true") throw new AppError("billing_not_enabled", 503);
+    const target = z
+      .object({ plan: z.string().min(1).max(40), interval: z.enum(["monthly", "yearly"]) })
+      .strict()
+      .parse(await c.req.json());
+    const identity = c.get("identity");
+    return c.json(await service.planChanges.preview(identity.user.id, identity.session.id, target));
+  });
+  router.post("/v1/billing/subscription/change", async (c) => {
+    if (config.BILLING_ENABLED !== "true") throw new AppError("billing_not_enabled", 503);
+    const body = z
+      .object({ quote_id: z.uuid() })
+      .strict()
+      .parse(await c.req.json());
+    const identity = c.get("identity");
+    return c.json(
+      await service.planChanges.confirm(identity.user.id, identity.session.id, body.quote_id),
+      202,
+    );
+  });
+  router.get("/v1/billing/subscription/changes/:id", async (c) =>
+    c.json(
+      await service.planChanges.get(c.get("identity").user.id, z.uuid().parse(c.req.param("id"))),
+    ),
+  );
   router.post("/v1/billing/portal", async (c) =>
     c.json({ url: await service.portal(c.get("identity").user.id) }),
   );

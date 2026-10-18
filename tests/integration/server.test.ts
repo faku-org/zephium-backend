@@ -130,3 +130,27 @@ test("real HTTP SSE releases its first chunk before the producer finishes", asyn
     await server.stop(true);
   }
 });
+
+test("checkout survives the combined bounded state-read and create deadlines", async () => {
+  const server = createApiServer(
+    () => ({
+      async fetch() {
+        await Bun.sleep(16_000);
+        return Response.json({ url: "https://sandbox.polar.sh/synthetic-checkout" });
+      },
+    }),
+    await freePort(),
+    loopback,
+  );
+  try {
+    const response = await fetch(`http://${loopback}:${server.port}/v1/billing/checkout`, {
+      method: "POST",
+      body: "{}",
+      signal: AbortSignal.timeout(25_000),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ url: "https://sandbox.polar.sh/synthetic-checkout" });
+  } finally {
+    await server.stop(true);
+  }
+}, 30_000);

@@ -153,8 +153,8 @@ export async function grant(
   expires: Date | null,
   periodStart: Date | null = null,
 ) {
-  await tx`INSERT INTO credit_grant(id,user_id,grant_key,kind,policy_revision,plan_id,amount,expires_at,period_start)
-    VALUES (${crypto.randomUUID()},${userId},${key},${kind},${revision},${planId},${amount},${expires?.toISOString() ?? null},${periodStart?.toISOString() ?? null}) ON CONFLICT(user_id,grant_key) DO NOTHING`;
+  await tx`INSERT INTO credit_grant(id,user_id,grant_key,kind,policy_revision,plan_id,amount,expires_at,period_start,allowance_basis)
+    VALUES (${crypto.randomUUID()},${userId},${key},${kind},${revision},${planId},${amount},${expires?.toISOString() ?? null},${periodStart?.toISOString() ?? null},${kind === "included" ? amount : null}) ON CONFLICT(user_id,grant_key) DO NOTHING`;
 }
 export async function availableGrants(tx: Tx, userId: string, planId: string) {
   const rows =

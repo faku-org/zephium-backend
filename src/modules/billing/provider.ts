@@ -1,4 +1,6 @@
 import { HTTPClient, Polar } from "@polar-sh/sdk";
+import { PolarError } from "@polar-sh/sdk/models/errors/polarerror";
+import { ResponseValidationError } from "@polar-sh/sdk/models/errors/responsevalidationerror";
 import { Webhook } from "standardwebhooks";
 import { z } from "zod";
 import type { Config } from "../../platform/config";
@@ -34,7 +36,63 @@ export interface ProductOffer {
   productName: string;
   price: { amount_minor: number; currency: string };
 }
+export interface BillingSubscription {
+  id: string;
+  customerId: string;
+  accountId: string | null;
+  productId: string;
+  status: string;
+  periodStart: Date;
+  paidUntil: Date;
+  subscriptionStart: Date | null;
+  modifiedAt: Date | null;
+  cancelAtPeriodEnd: boolean;
+  amountMinor: number;
+  currency: string;
+  recurringInterval: string;
+  recurringIntervalCount: number;
+  discountId: string | null;
+  pendingChange: { productId: string; appliesAt: Date } | null;
+}
+
+/** A definite provider refusal; other failures may have completed the remote change. */
+export class SubscriptionChangeRejected extends AppError {}
+
+function rejectSubscriptionChange(error: unknown): never {
+  if (
+    error instanceof PolarError &&
+    !(error instanceof ResponseValidationError) &&
+    error.contentType.split(";")[0]?.trim().toLowerCase() === "application/json"
+  ) {
+    switch (error.statusCode) {
+      case 402:
+        throw new SubscriptionChangeRejected("payment_failed", 402);
+      case 409:
+        throw new SubscriptionChangeRejected("subscription_locked", 409);
+      case 400:
+      case 404:
+      case 422:
+        throw new SubscriptionChangeRejected("invalid_subscription_change", 400);
+      case 401:
+      case 403:
+        throw new SubscriptionChangeRejected("billing_unavailable", 503);
+      case 429: {
+        const seconds = error.headers.get("retry-after");
+        const retry = seconds !== null && /^\d{1,6}$/.test(seconds) ? Number(seconds) : undefined;
+        throw new SubscriptionChangeRejected("billing_rate_limited", 429, retry);
+      }
+    }
+  }
+  throw error;
+}
+
 export interface BillingProvider {
+  subscription?(id: string): Promise<BillingSubscription>;
+  changeSubscription?(
+    id: string,
+    productId: string,
+    behavior: "invoice" | "next_period",
+  ): Promise<BillingSubscription>;
   state(accountId: string): Promise<CustomerState | null>;
   checkout(
     accountId: string,
@@ -43,7 +101,11 @@ export interface BillingProvider {
     policyRevision?: number,
     purchase?: Purchase,
   ): Promise<{ id?: string; url: string; expiresAt: Date }>;
-  productOffer?(productId: string, purchase: Purchase): Promise<ProductOffer>;
+  productOffer?(
+    productId: string,
+    purchase: Purchase,
+    options?: { fresh?: boolean },
+  ): Promise<ProductOffer>;
   ordersForCheckouts?(accountId: string, checkoutIds: string[]): Promise<BillingOrder[]>;
   portal(accountId: string): Promise<string>;
   deleteCustomer(accountId: string): Promise<void>;
@@ -57,9 +119,10 @@ export function polarProvider(
   config: Pick<Config, "POLAR_ACCESS_TOKEN" | "POLAR_ENVIRONMENT" | "BILLING_RETURN_URL"> & {
     BILLING_SUCCESS_URL?: string;
   },
+  fetcher: typeof boundedBillingFetch = boundedBillingFetch,
 ): BillingProvider {
   const polar = new Polar({
-    httpClient: new HTTPClient({ fetcher: boundedBillingFetch }),
+    httpClient: new HTTPClient({ fetcher }),
     accessToken: config.POLAR_ACCESS_TOKEN,
     server: config.POLAR_ENVIRONMENT,
     timeoutMs: 8000,
@@ -71,8 +134,13 @@ export function polarProvider(
   type Product = Awaited<ReturnType<typeof polar.products.get>>;
   const products = new Map<string, { value: Product; until: number }>();
   const loading = new Map<string, Promise<Product>>();
-  async function product(id: string): Promise<Product> {
+  async function product(id: string, fresh = false): Promise<Product> {
     enabled();
+    if (fresh) {
+      const value = await polar.products.get({ id }, { signal: AbortSignal.timeout(8000) });
+      if (value.id !== id) throw new AppError("provider_identity_mismatch", 503);
+      return value;
+    }
     const cached = products.get(id);
     if (cached && cached.until > Date.now()) return cached.value;
     const pending = loading.get(id);
@@ -106,7 +174,58 @@ export function polarProvider(
       policyRevision: typeof revision === "number" ? revision : undefined,
     };
   }
+  function subscriptionValue(
+    subscription: Awaited<ReturnType<typeof polar.subscriptions.get>>,
+    id: string,
+  ): BillingSubscription {
+    if (subscription.id !== id || subscription.customer.id !== subscription.customerId)
+      throw new AppError("provider_identity_mismatch", 503);
+    return {
+      id: subscription.id,
+      customerId: subscription.customerId,
+      accountId: subscription.customer.externalId ?? null,
+      productId: subscription.productId,
+      status: subscription.status,
+      periodStart: subscription.currentPeriodStart,
+      paidUntil: subscription.currentPeriodEnd,
+      subscriptionStart: subscription.startedAt,
+      modifiedAt: subscription.modifiedAt,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      amountMinor: subscription.amount,
+      currency: subscription.currency,
+      recurringInterval: subscription.recurringInterval,
+      recurringIntervalCount: subscription.recurringIntervalCount,
+      discountId: subscription.discountId,
+      pendingChange: subscription.pendingUpdate?.productId
+        ? {
+            productId: subscription.pendingUpdate.productId,
+            appliesAt: subscription.pendingUpdate.appliesAt,
+          }
+        : null,
+    };
+  }
   return {
+    async subscription(id) {
+      enabled();
+      return subscriptionValue(
+        await polar.subscriptions.get({ id }, { signal: AbortSignal.timeout(8000) }),
+        id,
+      );
+    },
+    async changeSubscription(id, productId, behavior) {
+      enabled();
+      try {
+        return subscriptionValue(
+          await polar.subscriptions.update(
+            { id, subscriptionUpdate: { productId, prorationBehavior: behavior } },
+            { signal: AbortSignal.timeout(8000) },
+          ),
+          id,
+        );
+      } catch (error) {
+        rejectSubscriptionChange(error);
+      }
+    },
     async state(accountId) {
       enabled();
       try {
@@ -157,8 +276,8 @@ export function polarProvider(
         expiresAt: c.expiresAt,
       };
     },
-    async productOffer(productId, purchase) {
-      const value = await product(productId);
+    async productOffer(productId, purchase, options) {
+      const value = await product(productId, options?.fresh);
       assertPurchaseProduct(value, purchase);
       const active = value.prices.filter((price) => !price.isArchived);
       const price = active[0];

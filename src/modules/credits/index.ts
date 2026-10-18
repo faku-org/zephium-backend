@@ -14,3 +14,4 @@ export {
 export { audioHoldCost, emptyUsage, holdCost, type Usage } from "./pricing";
 export { requestReceipt, type UsageCursor, usageHistory } from "./queries";
 export { createCreditRoutes } from "./routes";
+export { applyPaidUpgrade } from "./subscription-allowance";
