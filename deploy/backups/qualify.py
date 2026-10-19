@@ -145,16 +145,22 @@ try:
     cfg['global']['repo1-cipher-pass']=secrets.token_urlsafe(48)
     with wrong.open('w') as out:cfg.write(out)
     os.chmod(wrong,0o600);os.chown(wrong,uid,gid)
-    result=docker('run','--rm','-u','postgres','--mount',f'type=bind,source={wrong},target=/etc/pgbackrest/pgbackrest.conf,readonly',args.image,'pgbackrest','--stanza=zephium','--log-level-console=error','--output=json','info',check=False,timeout=120)
+    control=json.loads(pgbackrest(source,'--output=json','info').stdout)
+    if len(control)!=1 or control[0].get('name')!='zephium' or control[0].get('status',{}).get('code')!=0:raise RuntimeError('valid_passphrase_control_failed')
+    result=docker('run','--rm','-u','postgres','--mount',f'type=bind,source={wrong},target=/etc/pgbackrest/pgbackrest.conf,readonly',args.image,'pgbackrest','--stanza=zephium','--log-level-console=error','--output=text','info',check=False,timeout=120)
     if result.returncode!=0:raise RuntimeError('wrong_passphrase_probe_inconclusive')
-    wrong_info=json.loads(result.stdout)
-    if len(wrong_info)!=1 or wrong_info[0].get('name')!='zephium':raise RuntimeError('wrong_passphrase_probe_inconclusive')
-    repo_status=wrong_info[0].get('repo',[])
-    if len(repo_status)!=1 or repo_status[0].get('key')!=1:raise RuntimeError('wrong_passphrase_probe_inconclusive')
-    status=repo_status[0].get('status',{})
-    message=status.get('message','')
-    if status.get('code')!=99 or '[CryptoError]' not in message or 'unable to flush' not in message:
+    # Failed decryption may reach strict metadata parsing before cipher finalization.
+    # Diagnostics can contain arbitrary decoded bytes: never print or JSON-parse them.
+    message=result.stdout
+    leaf_errors={'CryptoError','FormatError','ChecksumError'}
+    outer_errors=set(re.findall(r'(?m)^\s*\[([A-Za-z]+Error)\]',message))
+    nested_errors=set(re.findall(r'(?m)^\s*([A-Za-z]+Error):',message))
+    if ('stanza: zephium' not in message or 'status: error' not in message
+        or 'unable to load info file' not in message or not outer_errors
+        or not outer_errors <= leaf_errors | {'FileOpenError'}
+        or not nested_errors or not nested_errors <= leaf_errors):
         raise RuntimeError('wrong_passphrase_probe_inconclusive')
+    report['wrong_passphrase_error_classes']=sorted(outer_errors | nested_errors)
     valid_info=json.loads(pgbackrest(source,'--output=json','info').stdout)
     if valid_info[0].get('status',{}).get('code')!=0:raise RuntimeError('valid_passphrase_control_failed')
     report['wrong_passphrase_rejected']=True
