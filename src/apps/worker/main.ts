@@ -2,6 +2,7 @@ import { rename, writeFile } from "node:fs/promises";
 import {
   cleanup,
   polarProvider,
+  processContactSync,
   processOrder,
   processPlanChange,
   workOnce,
@@ -60,14 +61,14 @@ try {
       }
       if (Date.now() - lastHealth > 60_000) {
         const [status] =
-          await db.sql`SELECT EXISTS(SELECT 1 FROM billing_plan_change WHERE attempts>=10 AND state IN ('executing','uncertain')) OR EXISTS(SELECT 1 FROM billing_customer WHERE attempts >= 10) OR EXISTS(SELECT 1 FROM billing_order_job WHERE attempts>=10 AND requested>processed) OR EXISTS(SELECT 1 FROM cloud_outbox WHERE attempts>=10 AND delivered_at IS NULL) AS exhausted`;
+          await db.sql`SELECT EXISTS(SELECT 1 FROM billing_plan_change WHERE attempts>=10 AND state IN ('executing','uncertain')) OR EXISTS(SELECT 1 FROM billing_customer WHERE attempts >= 10) OR EXISTS(SELECT 1 FROM billing_order_job WHERE attempts>=10 AND requested>processed) OR EXISTS(SELECT 1 FROM cloud_outbox WHERE attempts>=10 AND delivered_at IS NULL) AS exhausted, EXISTS(SELECT 1 FROM billing_contact_job j JOIN auth_user u ON u.id=j.user_id WHERE j.attempts>=10 AND j.requested>j.processed AND u.lifecycle='active') AS contact_exhausted`;
         const health = { time: Date.now(), ready: !status?.exhausted };
         await writeFile("/tmp/zephium-worker-health.tmp", JSON.stringify(health), { mode: 0o600 });
         await rename("/tmp/zephium-worker-health.tmp", "/tmp/zephium-worker-health.json");
         lastHealth = Date.now();
         const budgetWarning = await budgetNearLimit(db, policy);
         if (
-          (status?.exhausted || budgetWarning) &&
+          (status?.exhausted || status?.contact_exhausted || budgetWarning) &&
           config.OPERATIONS_WEBHOOK &&
           Date.now() - lastAlert > 3600_000
         ) {
@@ -75,7 +76,9 @@ try {
             config.OPERATIONS_WEBHOOK,
             status?.exhausted
               ? "Zephium billing work requires operator attention"
-              : "Zephium cloud spending is near a configured safety limit",
+              : status?.contact_exhausted
+                ? "Zephium billing contact update requires operator attention"
+                : "Zephium cloud spending is near a configured safety limit",
           );
           lastAlert = Date.now();
         }
@@ -94,9 +97,12 @@ try {
       const orderWorked = config.POLAR_ACCESS_TOKEN
         ? await processOrder(db, policy, provider)
         : false;
+      const contactWorked = config.POLAR_ACCESS_TOKEN
+        ? await processContactSync(db, provider)
+        : false;
       const exported = config.POLAR_ACCESS_TOKEN ? await exportUsage(db, ingestUsage) : false;
       const reconciled = await workOnce(db, provider, products, ranks);
-      if (planChanged || orderWorked || exported || reconciled) continue;
+      if (planChanged || orderWorked || contactWorked || exported || reconciled) continue;
     } catch {
       operationalEvent("worker_iteration_failed");
     }

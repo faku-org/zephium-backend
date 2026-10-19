@@ -150,6 +150,7 @@ test("email change rechecks session revocation after waiting for the lifecycle l
       await tx`SELECT user_id FROM billing_customer WHERE user_id=${userId} FOR UPDATE`;
     },
     onDeletionRequested: async () => {},
+    onEmailChanged: async () => {},
     exportExtras: async () => ({ billing: null, usage: null }),
   });
   const destination = address();
@@ -233,6 +234,7 @@ test("mutation freshness uses current persisted session state while deletion acc
       await tx`SELECT user_id FROM billing_customer WHERE user_id=${userId} FOR UPDATE`;
     },
     onDeletionRequested: async () => {},
+    onEmailChanged: async () => {},
     exportExtras: async () => ({ billing: null, usage: null }),
   });
   await fixture.db
@@ -256,4 +258,53 @@ test("mutation freshness uses current persisted session state while deletion acc
   expect(
     (await fixture.db.sql`SELECT lifecycle,name FROM auth_user WHERE id=${identity.user.id}`)[0],
   ).toMatchObject({ lifecycle: "active", name: "" });
+});
+
+test("email change and its durable reconciliation hook roll back together", async () => {
+  const s = setup();
+  const email = address();
+  const otp = await s.send(email);
+  const response = await s.request("/sign-in/email-otp", { email, otp });
+  const token = response.headers.get("set-auth-token");
+  if (!token) throw new Error("Missing fixture token");
+  const identity = await s.auth.api.getSession({
+    headers: new Headers({ Authorization: `Bearer ${token}` }),
+    query: { disableCookieCache: true },
+  });
+  if (!identity) throw new Error("Missing fixture identity");
+  await fixture.db.sql`CREATE TABLE email_sync_probe(user_id text PRIMARY KEY)`;
+  let rejectQueue = true;
+  const service = createAccountService(s.config, fixture.db, s.mailer, {
+    beforeAccountMutation: async (tx, userId) => {
+      await tx`SELECT user_id FROM billing_customer WHERE user_id=${userId} FOR UPDATE`;
+    },
+    onDeletionRequested: async () => {},
+    onEmailChanged: async (tx, userId) => {
+      await tx`INSERT INTO email_sync_probe(user_id) VALUES (${userId})`;
+      if (rejectQueue) throw new Error("Injected contact queue failure");
+    },
+    exportExtras: async () => ({ billing: null, usage: null }),
+  });
+  const destination = address();
+  await service.requestEmailChange(identity, destination);
+  const code = s.codes.get(destination);
+  if (!code) throw new Error("Missing fixture email-change code");
+  await expect(service.confirmEmailChange(identity, destination, code)).rejects.toThrow(
+    "Injected contact queue failure",
+  );
+  const [unchanged] = await fixture.db
+    .sql`SELECT email FROM auth_user WHERE id=${identity.user.id}`;
+  expect(unchanged?.email).toBe(email);
+  expect(
+    await fixture.db.sql`SELECT id FROM auth_session WHERE user_id=${identity.user.id}`,
+  ).toHaveLength(1);
+  expect(await fixture.db.sql`SELECT user_id FROM email_sync_probe`).toHaveLength(0);
+  rejectQueue = false;
+  await service.confirmEmailChange(identity, destination, code);
+  const [changed] = await fixture.db.sql`SELECT email FROM auth_user WHERE id=${identity.user.id}`;
+  expect(changed?.email).toBe(destination);
+  expect(
+    await fixture.db.sql`SELECT id FROM auth_session WHERE user_id=${identity.user.id}`,
+  ).toHaveLength(0);
+  expect(await fixture.db.sql`SELECT user_id FROM email_sync_probe`).toHaveLength(1);
 });

@@ -54,6 +54,7 @@ async function snapshot(db: Database, userId: string) {
     costRecords: await db.sql`SELECT * FROM cloud_cost_record ORDER BY request_id`,
     outbox:
       await db.sql`SELECT o.* FROM cloud_outbox o JOIN cloud_request r ON r.id=o.request_id WHERE r.user_id=${userId} ORDER BY o.request_id`,
+    contactJobs: await db.sql`SELECT * FROM billing_contact_job WHERE user_id=${userId}`,
     orderJobs:
       await db.sql`SELECT * FROM billing_order_job WHERE user_id=${userId} ORDER BY order_id`,
   };
@@ -132,6 +133,8 @@ try {
       (${`${budgetScope}:total`},725000),
       (${`${budgetScope}:day:${budgetDay}`},725000),
       (${`${budgetScope}:free:${budgetDay}`},412500)`;
+  await fixture.db
+    .sql`INSERT INTO billing_contact_job(user_id,requested,processed,attempts) VALUES (${id},2,1,1)`;
   // Customer/request rows disappear; independent deployment exposure must remain in the dump.
   await fixture.db.sql`DELETE FROM auth_user WHERE id=${deletedUserId}`;
   if ((await fixture.db.sql`SELECT id FROM cloud_request WHERE id=${unknownId}`).length)
@@ -148,6 +151,7 @@ try {
     before.allocations.length !== 1 ||
     before.outbox.length !== 1 ||
     before.orderJobs.length !== 1 ||
+    before.contactJobs.length !== 1 ||
     before.reversals.length !== 1 ||
     before.reversals[0]?.order_id !== "restore-refunded-before-paid" ||
     before.spendBuckets.length !== 3 ||

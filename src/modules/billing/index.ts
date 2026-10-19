@@ -1,4 +1,9 @@
-export { lockAccountBilling, scheduleAccountDeletion } from "./account-lifecycle";
+export {
+  lockAccountBilling,
+  queueBillingContactSync,
+  scheduleAccountDeletion,
+} from "./account-lifecycle";
+export { processContactSync } from "./contact-sync";
 export { type BillingSelection, type BillingService, createBillingService } from "./desktop";
 export { processPlanChange } from "./plan-change-worker";
 export {

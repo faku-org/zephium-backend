@@ -9,6 +9,7 @@ import { AppError } from "../../platform/errors";
 export interface CustomerState {
   customerId: string;
   accountId: string;
+  email?: string | null;
   subscriptions: {
     id?: string;
     periodStart?: Date;
@@ -94,6 +95,7 @@ export interface BillingProvider {
     behavior: "invoice" | "next_period",
   ): Promise<BillingSubscription>;
   state(accountId: string): Promise<CustomerState | null>;
+  updateCustomerEmail?(accountId: string, email: string): Promise<void>;
   checkout(
     accountId: string,
     email: string,
@@ -234,6 +236,7 @@ export function polarProvider(
         return {
           customerId: c.id,
           accountId,
+          email: c.email ?? null,
           subscriptions: c.activeSubscriptions.map((s) => ({
             id: s.id,
             periodStart: s.currentPeriodStart,
@@ -248,6 +251,20 @@ export function polarProvider(
         if (missing(error)) return null;
         throw error;
       }
+    },
+    async updateCustomerEmail(accountId, email) {
+      enabled();
+      const normalized = email.trim().toLowerCase();
+      const customer = await polar.customers.updateExternal(
+        { externalId: accountId, customerUpdateExternalID: { email: normalized } },
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (
+        customer.externalId !== accountId ||
+        typeof customer.email !== "string" ||
+        customer.email.trim().toLowerCase() !== normalized
+      )
+        throw new AppError("provider_identity_mismatch", 503);
     },
     async checkout(accountId, email, productId, policyRevision, purchase) {
       enabled();

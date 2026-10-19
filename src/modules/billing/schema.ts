@@ -118,3 +118,27 @@ export const billingPlanChange = pgTable(
     index("billing_plan_change_user").on(t.userId, t.createdAt.desc()),
   ],
 );
+
+export const billingContactJob = pgTable(
+  "billing_contact_job",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    requested: integer("requested").notNull().default(1),
+    processed: integer("processed").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttempt: time("next_attempt").notNull().defaultNow(),
+  },
+  (t) => [
+    check("billing_contact_job_requested_check", sql`${t.requested} >= 0`),
+    check(
+      "billing_contact_job_processed_check",
+      sql`${t.processed} >= 0 AND ${t.processed} <= ${t.requested}`,
+    ),
+    check("billing_contact_job_attempts_check", sql`${t.attempts} >= 0`),
+    index("billing_contact_job_work")
+      .on(t.nextAttempt)
+      .where(sql`${t.requested} > ${t.processed} AND ${t.attempts} < 10`),
+  ],
+);

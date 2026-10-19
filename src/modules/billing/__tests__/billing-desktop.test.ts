@@ -59,6 +59,9 @@ test("disabled billing makes no provider calls and has no offers or paid access"
   expect(view.offers).toBeNull();
   expect(view.subscription.status).toBe("not_applicable");
   expect(view.paid).toBe(false);
+  expect(view.capabilities.hostedAI).toBe(true);
+  const { offers: _offers, ...summary } = view;
+  expect(await service.summary(userId)).toEqual(summary);
   await expect(service.portal(userId)).rejects.toMatchObject({ code: "billing_not_enabled" });
   await expect(
     service.recordCheckout(userId, { id: "c1", expiresAt: new Date() }, productId, 1, {
@@ -100,6 +103,9 @@ test("offers use provider prices, and portal requires an existing customer", asy
     code: "billing_unavailable",
     status: 503,
   });
+  const summary = await broken.summary(userId);
+  expect(summary.capabilities.hostedAI).toBe(true);
+  expect(summary).not.toHaveProperty("offers");
 });
 
 test("refresh binds paid top-ups to known checkout and grants once", async () => {

@@ -473,6 +473,89 @@ test("billing disabled exposes no offers and rejects portal and checkout", async
   expect(calls).toEqual(before);
 });
 
+test("account export matches disabled billing with enabled cloud without provider calls", async () => {
+  const policy = testPolicy();
+  await registerPolicy(fixture.db, policy);
+  let providerCalls = 0;
+  const unavailable = async () => {
+    providerCalls++;
+    throw new Error("Injected provider outage");
+  };
+  const cloud = createCloudService(fixture.db, policy, transport, fixture.config.ABUSE_SECRET);
+  const target = createApp(
+    fixture.config,
+    fixture.db,
+    createAuth(fixture.config, fixture.db, mailer),
+    { ...provider, state: unavailable, productOffer: unavailable },
+    () => "198.51.100.12",
+    cloud,
+    mailer,
+  );
+  const owner = await login(target);
+  await fixture.db.sql`UPDATE billing_customer SET provider_touched=true,status='active',
+    paid_until=now()+interval '1 day',reconciled_at=now() WHERE user_id=${owner.id}`;
+  const billing = await request(target, "/v1/billing", "GET", undefined, owner.token);
+  expect(billing.status).toBe(200);
+  const { offers, ...summary } = await billing.json();
+  expect(offers).toBeNull();
+  expect(structuredClone(summary)).toMatchObject({
+    subscription: { status: "not_applicable" },
+    paid: false,
+    capabilities: { hostedAI: true, synchronization: false },
+  });
+  const exported = await request(target, "/v1/account/export", "GET", undefined, owner.token);
+  expect(exported.status).toBe(200);
+  expect((await exported.json()).billing).toEqual(summary);
+  expect(providerCalls).toBe(0);
+});
+
+test("account export remains available during product-provider failure and wallet review", async () => {
+  const policy = testPolicy();
+  await registerPolicy(fixture.db, policy);
+  const config = { ...fixture.config, BILLING_ENABLED: "true" as const };
+  let providerCalls = 0;
+  const unavailable = async () => {
+    providerCalls++;
+    throw new Error("Injected provider outage");
+  };
+  const cloud = createCloudService(fixture.db, policy, transport, config.ABUSE_SECRET);
+  const target = createApp(
+    config,
+    fixture.db,
+    createAuth(config, fixture.db, mailer),
+    { ...provider, state: unavailable, productOffer: unavailable },
+    () => "198.51.100.12",
+    cloud,
+    mailer,
+  );
+  const owner = await login(target);
+  await fixture.db.sql`INSERT INTO credit_wallet(user_id,suspended) VALUES (${owner.id},true)`;
+  const billing = await request(target, "/v1/billing", "GET", undefined, owner.token);
+  expect(billing.status).toBe(503);
+  expect(await billing.json()).toEqual({
+    error: { code: "billing_unavailable" },
+    request_id: null,
+  });
+  expect(providerCalls).toBe(1);
+  const usage = await request(target, "/v1/usage", "GET", undefined, owner.token);
+  expect(usage.status).toBe(403);
+  expect(await usage.json()).toEqual({
+    error: { code: "billing_review_required" },
+    request_id: null,
+  });
+  const exported = await request(target, "/v1/account/export", "GET", undefined, owner.token);
+  expect(exported.status).toBe(200);
+  const body = await exported.json();
+  expect(body.billing).toMatchObject({
+    subscription: { status: "inactive" },
+    paid: false,
+    capabilities: { hostedAI: true },
+  });
+  expect(body.billing).not.toHaveProperty("offers");
+  expect(body.usage).toMatchObject({ plan: "free", purchased_remaining: "0" });
+  expect(providerCalls).toBe(1);
+});
+
 test("desktop checkout and refresh grant paid top-up only to its owner", async () => {
   const policy = testPolicy();
   await registerPolicy(fixture.db, policy);
@@ -574,4 +657,38 @@ test("self-hosted plan shows configured models without Polar or private keys in 
     subscription: { status: "not_applicable" },
     paid: false,
   });
+});
+
+test("verified account email change durably queues billing contact sync and revokes sessions", async () => {
+  const target = app();
+  const user = await login(target);
+  const email = `${crypto.randomUUID()}@example.test`;
+  await fixture.db.sql`UPDATE billing_customer SET provider_touched=true,attempts=4,
+    next_attempt=now()+interval '1 day' WHERE user_id=${user.id}`;
+  const [before] = await fixture.db
+    .sql`SELECT requested FROM billing_customer WHERE user_id=${user.id}`;
+  expect(
+    (await request(target, "/v1/account/email/code", "POST", { email }, user.token)).status,
+  ).toBe(202);
+  const otp = codes.get(email);
+  expect(otp).toMatch(/^\d{6}$/);
+  const result = await request(target, "/v1/account/email", "PATCH", { email, otp }, user.token);
+  expect(result.status).toBe(200);
+  expect(await result.json()).toEqual({ updated: true, reauthentication_required: true });
+  const [account] = await fixture.db.sql`SELECT email FROM auth_user WHERE id=${user.id}`;
+  const [billing] = await fixture.db
+    .sql`SELECT requested,attempts,provider_touched FROM billing_customer WHERE user_id=${user.id}`;
+  const [contact] = await fixture.db
+    .sql`SELECT requested,processed,attempts,next_attempt<=clock_timestamp() AS due FROM billing_contact_job WHERE user_id=${user.id}`;
+  expect(account?.email).toBe(email);
+  expect(billing).toMatchObject({
+    requested: Number(before?.requested),
+    attempts: 4,
+    provider_touched: true,
+  });
+  expect(contact).toMatchObject({ requested: 1, processed: 0, attempts: 0, due: true });
+  expect(await fixture.db.sql`SELECT id FROM auth_session WHERE user_id=${user.id}`).toHaveLength(
+    0,
+  );
+  expect((await request(target, "/v1/account", "GET", undefined, user.token)).status).toBe(401);
 });

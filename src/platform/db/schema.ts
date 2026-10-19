@@ -3,6 +3,7 @@
 export {
   billing,
   billingCheckout,
+  billingContactJob,
   billingOrderJob,
   billingOrderReversal,
   billingPlanChange,

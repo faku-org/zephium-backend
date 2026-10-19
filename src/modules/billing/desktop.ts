@@ -104,7 +104,7 @@ export function createBillingService(
     };
   }
 
-  async function get(userId: string) {
+  async function summary(userId: string) {
     const access = await accountAccess(db, userId);
     if (!enabled)
       return {
@@ -112,14 +112,16 @@ export function createBillingService(
         subscription: { ...access.subscription, status: "not_applicable" },
         paid: false,
         capabilities: { ...access.capabilities, hostedAI: !!policy?.enabled },
-        offers: null,
       };
-    const listed = await offers();
     return {
       ...access,
       capabilities: { ...access.capabilities, hostedAI: !!policy?.enabled },
-      offers: listed,
     };
+  }
+
+  async function get(userId: string) {
+    const access = await summary(userId);
+    return { ...access, offers: enabled ? await offers() : null };
   }
 
   async function recordCheckout(
@@ -362,6 +364,7 @@ export function createBillingService(
   }
 
   return {
+    summary,
     get,
     refresh,
     portal,

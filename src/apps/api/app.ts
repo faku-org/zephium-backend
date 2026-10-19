@@ -10,11 +10,11 @@ import type { CloudService } from "../../modules/ai";
 import { createAiRoutes } from "../../modules/ai";
 import type { BillingProvider } from "../../modules/billing";
 import {
-  accountAccess,
   createBillingRoutes,
   createBillingService,
   createBillingWebhookRoutes,
   lockAccountBilling,
+  queueBillingContactSync,
   scheduleAccountDeletion,
 } from "../../modules/billing";
 import { createCreditRoutes, usageSummary } from "../../modules/credits";
@@ -69,8 +69,9 @@ export function createApp(
   const accounts = createAccountService(config, db, mailer, {
     beforeAccountMutation: lockAccountBilling,
     onDeletionRequested: scheduleAccountDeletion,
+    onEmailChanged: queueBillingContactSync,
     exportExtras: async (userId) => ({
-      billing: await accountAccess(db, userId),
+      billing: await billingService.summary(userId),
       usage: cloud ? await usageSummary(db, cloud.policy, userId, true) : null,
     }),
   });

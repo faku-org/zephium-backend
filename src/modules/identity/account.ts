@@ -132,6 +132,7 @@ export function createAccountService(
             await tx`SELECT id FROM auth_user WHERE email=${normalized} AND id<>${identity.user.id}`;
           if (other) throw new AppError("email_unavailable", 409);
           await tx`UPDATE auth_user SET email=${normalized},email_verified=true,updated_at=clock_timestamp() WHERE id=${identity.user.id}`;
+          await hooks.onEmailChanged(tx, identity.user.id);
           await tx`DELETE FROM auth_session WHERE user_id=${identity.user.id}`;
           await tx`DELETE FROM auth_verification WHERE identifier IN (${`sign-in-otp-${current?.email}`},${`sign-in-otp-${normalized}`})`;
         },

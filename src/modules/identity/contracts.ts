@@ -6,5 +6,6 @@ export type IdentityEnvironment = { Variables: { identity: IdentitySession } };
 export type AccountMutationHooks = {
   beforeAccountMutation(tx: TransactionSql, userId: string): Promise<void>;
   onDeletionRequested(tx: TransactionSql, userId: string): Promise<void>;
+  onEmailChanged(tx: TransactionSql, userId: string): Promise<void>;
   exportExtras(userId: string): Promise<{ billing: unknown; usage: unknown }>;
 };
