@@ -433,3 +433,126 @@ test("renewal reconciliation applies a scheduled downgrade with one new Pro allo
   expect(grants).toHaveLength(1);
   expect(grants[0]).toMatchObject({ plan_id: "pro", amount: "1000000" });
 });
+
+test("billing review blocks an upgrade preview before recording a quote", async () => {
+  const ctx = await setup();
+  await fixture.db.sql`UPDATE credit_wallet SET suspended=true WHERE user_id=${ctx.userId}`;
+  await expect(
+    ctx.service.preview(ctx.userId, ctx.sessionId, {
+      plan: "max",
+      interval: "monthly",
+    }),
+  ).rejects.toMatchObject({ code: "billing_review_required", status: 403 });
+  expect(
+    await fixture.db.sql`SELECT id FROM billing_plan_change WHERE user_id=${ctx.userId}`,
+  ).toHaveLength(0);
+  expect(ctx.mutations()).toBe(0);
+});
+
+test("suspension after an upgrade quote rejects confirmation without queuing or changing intent", async () => {
+  const ctx = await setup();
+  const quote = await ctx.service.preview(ctx.userId, ctx.sessionId, {
+    plan: "max",
+    interval: "monthly",
+  });
+  const [before] = await fixture.db
+    .sql`SELECT requested FROM billing_customer WHERE user_id=${ctx.userId}`;
+  await fixture.db.sql`UPDATE credit_wallet SET suspended=true WHERE user_id=${ctx.userId}`;
+  await expect(ctx.service.confirm(ctx.userId, ctx.sessionId, quote.id)).rejects.toMatchObject({
+    code: "billing_review_required",
+    status: 403,
+  });
+  expect(await ctx.service.get(ctx.userId, quote.id)).toMatchObject({ status: "quoted" });
+  expect(
+    (await fixture.db.sql`SELECT dispatched_at FROM billing_plan_change WHERE id=${quote.id}`)[0]
+      ?.dispatched_at,
+  ).toBeNull();
+  expect(
+    (await fixture.db.sql`SELECT requested FROM billing_customer WHERE user_id=${ctx.userId}`)[0],
+  ).toEqual(before);
+  expect(ctx.mutations()).toBe(0);
+});
+
+test("suspension after queueing or during upgrade preflight prevents provider dispatch", async () => {
+  for (const when of ["queued", "preflight"]) {
+    const ctx = await setup();
+    const quote = await queued(ctx);
+    const suspend = async () => {
+      await fixture.db.sql`UPDATE credit_wallet SET suspended=true WHERE user_id=${ctx.userId}`;
+    };
+    if (when === "queued") await suspend();
+    else
+      ctx.remote.subscription = async () => {
+        await suspend();
+        return structuredClone(ctx.getSubscription());
+      };
+    expect(await processPlanChange(fixture.db, ctx.remote, ctx.policy)).toBe(true);
+    expect(ctx.mutations()).toBe(0);
+    expect(await ctx.service.get(ctx.userId, quote.id)).toMatchObject({
+      status: "failed",
+      error: { code: "billing_review_required" },
+    });
+    expect(
+      (await fixture.db.sql`SELECT dispatched_at FROM billing_plan_change WHERE id=${quote.id}`)[0]
+        ?.dispatched_at,
+    ).toBeNull();
+    expect(
+      (await fixture.db.sql`SELECT product_id FROM billing_customer WHERE user_id=${ctx.userId}`)[0]
+        ?.product_id,
+    ).toBe(pro);
+    expect((await ctx.service.confirm(ctx.userId, ctx.sessionId, quote.id)).status).toBe("failed");
+  }
+});
+
+test("billing review still permits a downgrade without lifting wallet suspension", async () => {
+  const ctx = await setup("max");
+  await fixture.db.sql`UPDATE credit_wallet SET suspended=true WHERE user_id=${ctx.userId}`;
+  const quote = await queued(ctx, "pro");
+  expect(await processPlanChange(fixture.db, ctx.remote, ctx.policy)).toBe(true);
+  expect(ctx.mutations()).toBe(1);
+  expect(await ctx.service.get(ctx.userId, quote.id)).toMatchObject({
+    status: "scheduled",
+    target_plan: "pro",
+  });
+  expect((await ctx.service.confirm(ctx.userId, ctx.sessionId, quote.id)).status).toBe("scheduled");
+  expect(
+    (await fixture.db.sql`SELECT suspended FROM credit_wallet WHERE user_id=${ctx.userId}`)[0]
+      ?.suspended,
+  ).toBe(true);
+  expect(
+    (await fixture.db.sql`SELECT product_id FROM billing_customer WHERE user_id=${ctx.userId}`)[0]
+      ?.product_id,
+  ).toBe(max);
+});
+
+test("suspension after an already-dispatched charge still allows GET recovery and idempotent receipts", async () => {
+  const ctx = await setup();
+  const original = ctx.remote.changeSubscription;
+  if (!original) throw new Error("Missing fixture adapter");
+  ctx.remote.changeSubscription = async (...args) => {
+    await original(...args);
+    throw new TypeError("Synthetic lost response");
+  };
+  const quote = await queued(ctx);
+  await processPlanChange(fixture.db, ctx.remote, ctx.policy);
+  expect((await ctx.service.get(ctx.userId, quote.id)).status).toBe("uncertain");
+  expect(
+    (await fixture.db.sql`SELECT dispatched_at FROM billing_plan_change WHERE id=${quote.id}`)[0]
+      ?.dispatched_at,
+  ).not.toBeNull();
+  await fixture.db.sql`UPDATE credit_wallet SET suspended=true WHERE user_id=${ctx.userId}`;
+  expect((await ctx.service.confirm(ctx.userId, ctx.sessionId, quote.id)).status).toBe("uncertain");
+  await retry(quote.id);
+  expect(await processPlanChange(fixture.db, ctx.remote, ctx.policy)).toBe(true);
+  expect(ctx.mutations()).toBe(1);
+  expect((await ctx.service.get(ctx.userId, quote.id)).status).toBe("applied");
+  expect((await ctx.service.confirm(ctx.userId, ctx.sessionId, quote.id)).status).toBe("applied");
+  expect(
+    (await fixture.db.sql`SELECT suspended FROM credit_wallet WHERE user_id=${ctx.userId}`)[0]
+      ?.suspended,
+  ).toBe(true);
+  expect(
+    (await fixture.db.sql`SELECT product_id FROM billing_customer WHERE user_id=${ctx.userId}`)[0]
+      ?.product_id,
+  ).toBe(max);
+});

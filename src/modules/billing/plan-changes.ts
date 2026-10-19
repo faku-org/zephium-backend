@@ -1,6 +1,7 @@
 import { enforce, privateKey } from "../../platform/abuse";
 import type { Database, Tx } from "../../platform/db";
 import { AppError } from "../../platform/errors";
+import { assertPurchaseAllowed } from "../credits";
 import { assertMutationSession } from "../identity";
 import type { CloudPolicy } from "../policy";
 import { type PlanChangeQuote, type PlanChangeTarget, quotePlanChange } from "./plan-change-policy";
@@ -121,6 +122,7 @@ export function createPlanChangeService(
         throw new AppError("billing_refresh_required", 409);
       const [clock] = await tx`SELECT clock_timestamp() AS db_now`;
       const quote = quotePlanChange(p, subscription, target, offer, new Date(clock?.db_now));
+      if (quote.direction === "upgrade") await assertPurchaseAllowed(tx, userId);
       const [row] = await tx<
         PlanChangeRow[]
       >`INSERT INTO billing_plan_change(id,user_id,session_id,policy_revision,quote)
@@ -142,6 +144,7 @@ export function createPlanChangeService(
       await assertMutationSession(tx, userId, sessionId, row.state === "quoted");
       // The quote UUID is the idempotency key. Never enqueue an already submitted operation.
       if (row.state !== "quoted") return planChangeView(row);
+      if (row.quote.direction === "upgrade") await assertPurchaseAllowed(tx, userId);
       await assertBillingPolicy(tx, p.revision);
       const [clock] = await tx`SELECT clock_timestamp() AS db_now`;
       if (

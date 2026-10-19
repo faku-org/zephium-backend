@@ -12,6 +12,7 @@ export {
   usageSummary,
 } from "./ledger";
 export { audioHoldCost, emptyUsage, holdCost, type Usage } from "./pricing";
+export { assertPurchaseAllowed } from "./purchase-eligibility";
 export { requestReceipt, type UsageCursor, usageHistory } from "./queries";
 export { createCreditRoutes } from "./routes";
 export { applyPaidUpgrade } from "./subscription-allowance";

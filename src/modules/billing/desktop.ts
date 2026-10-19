@@ -2,7 +2,7 @@ import { enforce, privateKey } from "../../platform/abuse";
 import type { Config } from "../../platform/config";
 import type { Database, Tx } from "../../platform/db";
 import { AppError } from "../../platform/errors";
-import { applyTopup } from "../credits";
+import { applyTopup, assertPurchaseAllowed } from "../credits";
 import type { CloudPolicy } from "../policy";
 import { createPlanChangeService, pendingPlanChange } from "./plan-changes";
 import type {
@@ -226,6 +226,7 @@ export function createBillingService(
       const [account] = await tx`SELECT lifecycle FROM auth_user WHERE id=${userId}`;
       if (!billing || account?.lifecycle !== "active")
         throw new AppError("account_unavailable", 403);
+      await assertPurchaseAllowed(tx, userId);
       if (purchase.kind === "subscription") {
         if (
           billing.subscription_id &&

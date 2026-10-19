@@ -1,6 +1,6 @@
 import type { Database } from "../../platform/db";
 import { AppError, operationalEvent } from "../../platform/errors";
-import { applyPaidUpgrade } from "../credits";
+import { applyPaidUpgrade, assertPurchaseAllowed } from "../credits";
 import { assertMutationSession } from "../identity";
 import type { CloudPolicy } from "../policy";
 import { assertPlanChangeSubscription } from "./plan-change-policy";
@@ -144,6 +144,7 @@ export async function processPlanChange(
         WHERE b.user_id=${row.user_id} FOR UPDATE OF b`;
       if (billing?.lifecycle !== "active") throw new AppError("account_unavailable", 403);
       await assertMutationSession(tx, row.user_id, row.session_id, true);
+      if (quote.direction === "upgrade") await assertPurchaseAllowed(tx, row.user_id);
       await assertBillingPolicy(tx, policy.revision);
       if (policy.revision !== quote.policy_revision)
         throw new AppError("cloud_policy_changed", 503);

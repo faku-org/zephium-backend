@@ -583,3 +583,79 @@ test("lost subscription checkout response prevents concurrent or repeated creati
   ).rejects.toMatchObject({ code: "checkout_in_progress" });
   expect(calls).toBe(1);
 });
+
+test("spent-refund suspension blocks top-up and subscription checkout before any new intent", async () => {
+  const base = testPolicy();
+  const free = base.plans[0];
+  if (!free) throw new Error("Missing fixture plan");
+  const policy = testPolicy({
+    plans: [...base.plans, { ...free, id: "pro", rank: 1, allowanceUnits: "1000" }],
+    subscriptions: [
+      {
+        plan: "pro",
+        productId: "00000000-0000-4000-8000-000000000102",
+        interval: "monthly",
+        checkoutEnabled: true,
+      },
+    ],
+  });
+  await registerPolicy(fixture.db, policy);
+  for (const selection of [
+    { topup: "test-topup" },
+    { plan: "pro", interval: "monthly" },
+  ] as const) {
+    const { userId } = await createCloudAccount(fixture.db);
+    const order = {
+      id: crypto.randomUUID(),
+      userId,
+      productId,
+      paid: true,
+      refunded: false,
+      createdAt: new Date(),
+      policyRevision: policy.revision,
+    };
+    await applyTopup(fixture.db, policy, order);
+    await fixture.db.sql`UPDATE credit_grant SET spent=1 WHERE user_id=${userId} AND kind='topup'`;
+    await applyTopup(fixture.db, policy, { ...order, paid: false, refunded: true });
+    expect(
+      (await fixture.db.sql`SELECT suspended FROM credit_wallet WHERE user_id=${userId}`)[0]
+        ?.suspended,
+    ).toBe(true);
+    const [before] = await fixture.db
+      .sql`SELECT provider_touched,checkout_until,subscription_checkout_until,requested,processed
+      FROM billing_customer WHERE user_id=${userId}`;
+    let checkouts = 0;
+    const service = createBillingService(
+      enabledConfig(),
+      fixture.db,
+      provider({
+        checkout: async () => {
+          checkouts++;
+          return {
+            id: crypto.randomUUID(),
+            url: "https://sandbox.polar.sh/checkout/unexpected",
+            expiresAt: new Date(Date.now() + 3600_000),
+          };
+        },
+      }),
+      policy,
+    );
+    await expect(
+      service.startCheckout(userId, `${userId}@example.test`, selection),
+    ).rejects.toMatchObject({
+      code: "billing_review_required",
+      status: 403,
+    });
+    expect(checkouts).toBe(0);
+    expect(
+      (
+        await fixture.db
+          .sql`SELECT provider_touched,checkout_until,subscription_checkout_until,requested,processed
+      FROM billing_customer WHERE user_id=${userId}`
+      )[0],
+    ).toEqual(before);
+    expect(
+      await fixture.db.sql`SELECT checkout_id FROM billing_checkout WHERE user_id=${userId}`,
+    ).toHaveLength(0);
+  }
+});
