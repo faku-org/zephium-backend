@@ -37,6 +37,46 @@ The GitHub **Check** workflow runs static checks, tests, policy validation and b
 
 Use [staging setup](staging.md) for owner configuration and [operations](operations.md) for recovery. Record actual Resend delivery, Polar sandbox payment/refund behavior, native model metering, public TLS/SSE, independent encrypted restore and desktop flows. Green repository checks do not establish those results or a supported user capacity.
 
+## Recorded evidence — 2026-10-19
+
+This newer record supersedes the deployment-status statements in the October 18 history below. Staging serves application revision `781b7f3db9898e6c58b9e4777164cbe9bb76a75d`, migration 0009 and policy revision 3. Production has not been activated.
+
+### Repository and deployment
+
+- The complete local check passed **290 tests / 1,616 assertions**, module boundaries, TypeScript and Biome. The [release verification and immutable image build](https://github.com/zephium-browser/backend/actions/runs/39293804910) passed.
+- A separate CI run exposed timing ambiguity in an existing real-HTTP test: its 600 ms overall budget could expire before the 150 ms idle timer after database admission. Test-only commit `71a2437` separates the deadlines without changing application behavior. All 11 gateway integration tests passed locally; the subsequent [complete CI run](https://github.com/zephium-browser/backend/actions/runs/39296436468) passed. Staging's application image remains `781b7f3`.
+- The staging API and worker run the reviewed immutable digests. Public source metadata, readiness, policy revision/digest, migration 0009, worker freshness, private service networks and restricted environment-file permissions were checked. PostgreSQL was preserved during the guarded API/worker rollout.
+
+### Live sandbox checks
+
+These checks used approved disposable accounts, real email delivery, Polar sandbox and small synthetic OpenAI requests through the public HTTPS origin. They do not replace desktop UI testing.
+
+| Boundary | Observed result |
+| --- | --- |
+| Identity | Email-code sign-in, account name, device/current session identity, export, verified email change with stable account ID, old-session revocation, and logout passed. Polar contact synchronization completed without retries. |
+| Isolation and trial eligibility | Foreign usage and plan-change receipts returned 404. Reusing a previously claimed email did not issue another signup allowance. |
+| AI and accounting | Native SSE completion trailer, idempotent replay rejection, text and voice receipts, plan gating, daily-cap rejection and zero-balance rejection passed. Purchased usage settled against the purchased pack with no remaining hold. |
+| Checkout | A declined card granted no paid access. A successful purchase activated Pro without a manual billing refresh. Repeated creation was rate-limited, then blocked by the pending-checkout barrier. |
+| Plan changes | Pro-to-Max applied once on the same subscription, preserving spent units and adding only the remaining-period allowance difference. Repeated confirmation returned the same operation. Max-to-Pro was scheduled for renewal without immediate loss of Max access. |
+| Portal | Return URL was correct; cancellation set `cancelAtPeriodEnd:true` while retaining paid access and the same allowance. Conflicting plan changes were rejected. A customer with no Polar account received 409 `no_billing_account`. |
+| Refunds | A full unused top-up refund revoked its grant without suspending the wallet; refresh did not resurrect it. Refunding a pack after spending six test units revoked the pack and produced 403 `billing_review_required`, while export and the portal remained available. Both order jobs and reversal records were verified. |
+| Purchase restriction | Live testing found that a reviewed account could still create a checkout. Revision `781b7f3` fixes this; the same live request now returns 403. Six regressions cover checkout intents, upgrade preview/confirmation/dispatch, permitted downgrades and already-dispatched recovery. |
+| Deletion | Code-confirmed deletion returned 202, disabled access immediately and removed sessions. The worker correctly retained the account until its checkout-safety barrier. Final provider deletion and local purge are still pending. |
+| Client configuration | Billing/cloud are enabled only in staging, signup remains allowlisted, and conditional requests return an empty 304 with the expected ETag/cache behavior. |
+
+The signed-event/worker integration produced the expected billing and refund state. Direct inspection/replay of Polar's webhook delivery history was not performed: the minimal runtime token lacks webhook-read access, and its secret-bearing dashboard panel was left unopened. Duplicate, delayed, refund-before-grant and interrupted-operation cases also have PostgreSQL integration-test coverage; do not describe all of them as live provider replay tests.
+
+### Off-server recovery qualification
+
+A separate rehearsal against the configured Hetzner Object Storage repository passed using synthetic data: encrypted full/differential backup, rejection of a wrong cipher password, deletion of the source database before restore, differential restore, post-backup WAL recovery, expiry, and restoration after expiry. Test containers/volumes were removed. This qualifies the storage/recovery mechanism, not a production database backup: production is not deployed, its backup timers are not enabled, and disposable staging still has archival disabled.
+
+### Remaining gates
+
+- Final deletion cleanup cannot run before **2026-10-20 16:35:39 UTC**; verify the actual provider cancellation/deletion and local purge after that boundary. Do not alter timestamps to manufacture a pass.
+- Actual monthly renewal is in the future. Scheduling was verified live; renewal/grant transitions have clock-controlled integration tests.
+- Run the desktop against this staging version, including plan changes, top-ups, review-state UI and return/refresh behavior.
+- Confirm production allowances, credit denomination and provider invoice reconciliation; provision and qualify the separate production origin, credentials/products, actual initial backup/WAL restore, alerts, timers and independent monitoring. No production billing was enabled by these tests.
+
 ## Recorded evidence — 2026-10-18
 
 The following records the completed modular refactor and identity hardening. It is local repository evidence, not a live-service qualification.

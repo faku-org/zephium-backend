@@ -73,3 +73,29 @@ The repository implementation and local payment-recovery tests do not establish 
 ## Purchased balance display — additional field
 
 Use `GET /v1/usage.purchased_balance` for a monetary display: `{currency:"USD",amount:"11.345677"}` or null. The amount is an exact decimal string for available usage credit, excluding holds and expired/revoked credit. Show plan allowance as a percentage independently. Do not label `purchased_remaining / unit_scale` as USD when the display field is absent/null; older deployments and policies without a currency designation do not make that promise. This is usage credit, not a refundable cash balance. Currency designation must be explicitly activated in the environment's reviewed policy; adding the field to the repository does not change existing staging credit semantics.
+
+## Staging handoff — 2026-10-19
+
+Use `https://staging-api.zephium.app`. Application source `781b7f3` and policy revision **3** are live, with Cloud AI and Polar sandbox billing enabled. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-19).
+
+| Catalog ID | Roles | Access | Default |
+| --- | --- | --- | --- |
+| `gpt-6-luna` | lead, page, light; native search, tools and vision | free / pro / max | lead, page, light |
+| `gpt-4o-mini-transcribe` | transcribe | free / pro / max | transcribe |
+| `gpt-4o-transcribe` | transcribe | pro / max | no |
+
+Read the catalog and its per-model limits instead of hard-coding this table. There is no hosted decision-model default or Max-exclusive frontier row in this staging policy. No Anthropic beta headers are forwarded; this milestone did not live-qualify the other providers.
+
+Staging fixtures: Free has a one-time 2,000,000-unit allowance and no renewal or welcome bonus; Pro has 10,000,000 units per month; Max has 50,000,000 per month. Polar offers are Pro USD20/month, Max USD100/month, and `staging-topup` USD1 for 2,000,000 test units expiring after 365 days. These credit amounts are test fixtures, not final commercial allowances. Spend the earliest-expiring eligible grant first. `purchased_balance` remains **null**: do not invent a dollar balance from `unit_scale` or `purchased_remaining` before the owner approves currency denomination. There is no metered overage.
+
+Keep these client behaviors in the final UI pass:
+
+- Preserve the received checkout link for retrying the same checkout. Duplicate subscription creation can return `checkout_in_progress`; an existing subscription returns `subscription_change_required`. Use the preview/confirm/receipt flow for changes.
+- After returning from checkout/portal, refresh billing at no more than six calls per minute. A return page or HTTP202 operation receipt alone does not establish a successful purchase/change.
+- Display upgrade charges as tax-exclusive estimates. Retain the quote/operation ID; repeated confirmation resumes that operation. A scheduled receipt records the request outcome; refresh current billing/usage and respect later cancellation or provider changes.
+- Handle 401 `reauthentication_required` with fresh sign-in for sensitive mutations. Preserve separate API-origin vault entries. Email change and deletion revoke old sessions.
+- Handle 403 `billing_review_required` on usage, new checkout and upgrades with a support/review state, not another purchase retry. Account export, portal management and downgrades remain usable. The owner has a deliberately reviewed test account for this case.
+- Display one-time allowance percentages without a reset date when `allowance.renews:false` and `period_end:null`. A reused email may legitimately have zero signup allowance. Top-ups never unlock a higher model tier.
+- Verify native text/voice receipts, request IDs, SSE trailers, idempotency handling, plan-required/insufficient-credit/daily-limit responses, and Retry-After using the existing API shapes. This update adds no new endpoint or response shape; it corrects export/contact behavior and extends the existing review error to purchasing boundaries.
+
+Staging spending ceilings remain USD50 total, USD10 per UTC day and USD5 daily free subsidy. Effective signup protection is three new accounts per IP/day with disposable-email blocking; the allowlist remains enabled. Do not run deliberate spend-exhaustion or capacity campaigns.
