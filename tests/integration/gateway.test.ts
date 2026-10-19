@@ -518,15 +518,16 @@ test("upstream bytes reset idle timeout but the model duration remains a cap", a
     ...openai,
     id: "idle-model",
     upstreamModel: "synthetic-idle",
-    idleTimeoutMs: 150,
-    maxDurationMs: 600,
+    // Leave room for database admission so this case isolates the idle deadline.
+    idleTimeoutMs: 500,
+    maxDurationMs: 10000,
   };
   const cappedModel = {
     ...openai,
     id: "capped-model",
     upstreamModel: "synthetic-capped",
-    idleTimeoutMs: 150,
-    maxDurationMs: 300,
+    idleTimeoutMs: 2000,
+    maxDurationMs: 3000,
   };
   const timedPolicy = testPolicy({
     limits: policy.limits,
@@ -555,7 +556,7 @@ test("upstream bytes reset idle timeout but the model duration remains a cap", a
         max_output_tokens: 8,
         stream: true,
       }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(15000),
     });
   const delta =
     'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"tick"}\n\n';
@@ -589,7 +590,8 @@ test("upstream bytes reset idle timeout but the model duration remains a cap", a
     );
   };
   try {
-    generateFn = async () => periodic(280);
+    // Several idle windows elapse while upstream heartbeats keep the stream alive.
+    generateFn = async () => periodic(1100);
     const idle = await send("idle-model");
     expect(idle.status).toBe(200);
     const idleWire = await idle.text();
