@@ -32,7 +32,9 @@ signal.signal(signal.SIGINT,interrupted)
 
 def command(argv,timeout=60,check=True,input_text=None):
     result=subprocess.run(argv,input=input_text,text=True,errors="replace",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,check=False)
-    if check and result.returncode:raise RuntimeError('command_failed')
+    if check and result.returncode:
+        report['command_failure']={'exit_code':result.returncode,'pgbackrest_error_codes':sorted(set(re.findall(r'ERROR:\s+\[(\d{3})\]',result.stdout+'\n'+result.stderr)))}
+        raise RuntimeError('command_failed')
     return result
 
 def docker(*argv,timeout=60,check=True,input_text=None):
@@ -169,7 +171,7 @@ try:
     docker('stop','--time=30',source);docker('rm',source);containers.remove(source)
     docker('volume','rm',source_volume);volumes.remove(source_volume)
     mark('restore_differential_backup')
-    docker('run','--rm','-u','postgres','--memory=512m','--cpus=0.5','--mount',f'type=volume,source={restore_volume},target=/var/lib/postgresql','--mount',f'type=bind,source={config},target=/etc/pgbackrest/pgbackrest.conf,readonly',args.image,'pgbackrest','--stanza=zephium','--log-level-console=error',f'--set={differential}','--type=immediate','--archive-mode=off','restore',timeout=600)
+    docker('run','--rm','-u','postgres','--memory=512m','--cpus=0.5','--mount',f'type=volume,source={restore_volume},target=/var/lib/postgresql','--mount',f'type=bind,source={config},target=/etc/pgbackrest/pgbackrest.conf,readonly',args.image,'pgbackrest','--stanza=zephium','--log-level-console=error',f'--set={differential}','--type=immediate','--target-action=promote','--archive-mode=off','restore',timeout=600)
     start(restored,restore_volume,restore=True)
     if sql(restored,"SELECT md5(string_agg(id::text || ':' || marker || ':' || amount::text, ',' ORDER BY id)) FROM recovery_fixture;")!=expected:
         raise RuntimeError('differential_restore_mismatch')
@@ -198,7 +200,7 @@ try:
     new_volume(restore_volume)
     docker('run','--rm','--network=none','-u','root','--mount',f'type=volume,source={restore_volume},target=/var/lib/postgresql',args.image,'sh','-c','mkdir -p /var/lib/postgresql/18/docker && chown -R postgres:postgres /var/lib/postgresql')
     mark('restore_retained_backup_after_expiration')
-    docker('run','--rm','-u','postgres','--memory=512m','--cpus=0.5','--mount',f'type=volume,source={restore_volume},target=/var/lib/postgresql','--mount',f'type=bind,source={config},target=/etc/pgbackrest/pgbackrest.conf,readonly',args.image,'pgbackrest','--stanza=zephium','--log-level-console=error','--type=immediate','--archive-mode=off','restore',timeout=600)
+    docker('run','--rm','-u','postgres','--memory=512m','--cpus=0.5','--mount',f'type=volume,source={restore_volume},target=/var/lib/postgresql','--mount',f'type=bind,source={config},target=/etc/pgbackrest/pgbackrest.conf,readonly',args.image,'pgbackrest','--stanza=zephium','--log-level-console=error','--type=immediate','--target-action=promote','--archive-mode=off','restore',timeout=600)
     start(restored,restore_volume,restore=True)
     if sql(restored,"SELECT md5(string_agg(id::text || ':' || marker || ':' || amount::text, ',' ORDER BY id)) FROM recovery_fixture;")!=expected:
         raise RuntimeError('retained_backup_restore_mismatch')
@@ -207,6 +209,8 @@ try:
     mark('restore_verified')
 except Exception as error:
     report['status']='failed';report['failed_stage']=stage;report['error_type']=type(error).__name__
+    known={'command_failed','restore_promotion_timeout','database_start_timeout','differential_restore_mismatch','restored_fixture_mismatch','retention_did_not_expire_oldest_full','retained_backup_restore_mismatch','wrong_passphrase_probe_inconclusive','operator_interrupted'}
+    if isinstance(error,RuntimeError) and str(error) in known:report['failure_reason']=str(error)
     print(json.dumps({'status':'failed','stage':stage,'error_type':type(error).__name__}),flush=True)
 finally:
     cleanup=True

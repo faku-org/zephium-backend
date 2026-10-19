@@ -115,7 +115,7 @@ try {
     "--type=full",
     "backup",
   ]);
-  await docker(["rm", "-f", first]);
+  await docker(["rm", "-f", "-v", first]);
   // Restore to a new volume with the original database container gone.
   await docker([
     "run",
@@ -142,6 +142,8 @@ try {
     "pgbackrest",
     ...backupArgs,
     "--type=immediate",
+    "--target-action=promote",
+    "--archive-mode=off",
     "restore",
   ]);
   await docker([
@@ -167,17 +169,17 @@ try {
           "psql",
           "-At",
           "-c",
-          "SELECT value FROM recovery_fixture WHERE id=1",
+          "SELECT value || ':' || (NOT pg_is_in_recovery())::text || ':' || current_setting('archive_mode') FROM recovery_fixture WHERE id=1",
         ])
       ).trim();
-      if (value === "durable") break;
+      if (value === "durable:true:off") break;
     } catch {}
     await Bun.sleep(250);
   }
-  if (value !== "durable") throw new Error("Restored data did not match");
+  if (value !== "durable:true:off") throw new Error("Restored data did not match");
   console.log("Encrypted pgBackRest backup, WAL check and independent restore passed.");
 } finally {
-  for (const name of [first, second]) await docker(["rm", "-f", name]).catch(() => {});
+  for (const name of [first, second]) await docker(["rm", "-f", "-v", name]).catch(() => {});
   for (const name of [volume, restoredVolume]) await docker(["volume", "rm", name]).catch(() => {});
   await docker(["image", "rm", image]).catch(() => {});
   await rm(directory, { recursive: true, force: true });
