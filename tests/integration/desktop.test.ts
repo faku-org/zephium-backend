@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createApp } from "../../src/apps/api/app";
 import { createCloudService } from "../../src/modules/ai/service";
 import type { CloudTransport } from "../../src/modules/ai/transport";
-import type { BillingProvider } from "../../src/modules/billing/provider";
+import { processPlanChange } from "../../src/modules/billing/plan-change-worker";
+import type { BillingProvider, BillingSubscription } from "../../src/modules/billing/provider";
 import { createAuth, type Mailer } from "../../src/modules/identity/auth";
 import { registerPolicy } from "../../src/modules/policy/policy";
 import type { Config } from "../../src/platform/config";
@@ -11,6 +12,7 @@ import { testPolicy } from "../support/cloud-fixture";
 import { testDatabase } from "../support/database";
 
 let fixture: Awaited<ReturnType<typeof testDatabase>>;
+let subscriptionFixture: Awaited<ReturnType<typeof testDatabase>>;
 const codes = new Map<string, string>();
 const mailer: Mailer = {
   sendOTP: async (email, code) => {
@@ -75,9 +77,10 @@ const transport: CloudTransport = {
 
 beforeAll(async () => {
   fixture = await testDatabase();
+  subscriptionFixture = await testDatabase();
 }, 30000);
 afterAll(async () => {
-  await fixture.close();
+  await Promise.all([fixture.close(), subscriptionFixture.close()]);
 });
 function app(config: Config = fixture.config, cloud?: ReturnType<typeof createCloudService>) {
   return createApp(
@@ -132,6 +135,280 @@ async function login(target: App) {
   const body = (await signed.json()) as { user: { id: string } };
   return { id: body.user.id, token };
 }
+
+async function subscriptionApp() {
+  const db = subscriptionFixture.db;
+  const base = testPolicy();
+  const free = base.plans[0];
+  if (!free) throw new Error("Missing fixture plan");
+  const pro = "00000000-0000-4000-8000-000000000201";
+  const max = "00000000-0000-4000-8000-000000000202";
+  const policy = testPolicy({
+    welcomeUnits: "0",
+    plans: [
+      ...base.plans,
+      { ...free, id: "pro", rank: 1, allowanceUnits: "1000000" },
+      { ...free, id: "max", rank: 2, allowanceUnits: "5000000" },
+    ],
+    subscriptions: [
+      { plan: "pro", productId: pro, interval: "monthly" },
+      { plan: "max", productId: max, interval: "monthly" },
+    ],
+  });
+  await registerPolicy(db, policy);
+  const start = new Date(Date.now() - 15 * 86400000);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  let subscription: BillingSubscription = {
+    id: crypto.randomUUID(),
+    customerId: crypto.randomUUID(),
+    accountId: "",
+    productId: pro,
+    status: "active",
+    periodStart: start,
+    paidUntil: end,
+    subscriptionStart: start,
+    modifiedAt: start,
+    cancelAtPeriodEnd: false,
+    amountMinor: 2000,
+    currency: "usd",
+    recurringInterval: "month",
+    recurringIntervalCount: 1,
+    discountId: null,
+    pendingChange: null,
+  };
+  let mutations = 0;
+  const billing: BillingProvider = {
+    ...provider,
+    subscription: async (id) => {
+      if (id !== subscription.id) throw new Error("Unknown synthetic subscription");
+      return structuredClone(subscription);
+    },
+    productOffer: async (id) => ({
+      productId: id,
+      productName: id === max ? "Max" : "Pro",
+      price: { amount_minor: id === max ? 10000 : 2000, currency: "USD" },
+    }),
+    changeSubscription: async (id, productId, behavior) => {
+      expect(id).toBe(subscription.id);
+      expect(productId).toBe(max);
+      expect(behavior).toBe("invoice");
+      mutations++;
+      subscription = { ...subscription, productId, amountMinor: 10000, modifiedAt: new Date() };
+      return structuredClone(subscription);
+    },
+  };
+  const config = { ...subscriptionFixture.config, BILLING_ENABLED: "true" as const };
+  const cloud = createCloudService(db, policy, transport, config.ABUSE_SECRET);
+  const target = createApp(
+    config,
+    db,
+    createAuth(config, db, mailer),
+    billing,
+    () => "198.51.100.12",
+    cloud,
+    mailer,
+  );
+  const owner = await login(target);
+  subscription.accountId = owner.id;
+  await db.sql`UPDATE billing_customer SET provider_touched=true,
+    polar_id=${subscription.customerId},subscription_id=${subscription.id},product_id=${pro},
+    status='active',paid_until=${end.toISOString()},period_start=${start.toISOString()},
+    subscription_start=${start.toISOString()},reconciled_at=now() WHERE user_id=${owner.id}`;
+  return { target, owner, policy, billing, db, mutations: () => mutations };
+}
+
+test("subscription HTTP preview and receipts enforce ownership and duplicate confirmation charges once", async () => {
+  const ctx = await subscriptionApp();
+  const other = await login(ctx.target);
+  const preview = await request(
+    ctx.target,
+    "/v1/billing/subscription/preview",
+    "POST",
+    { plan: "max", interval: "monthly" },
+    ctx.owner.token,
+  );
+  expect(preview.status).toBe(200);
+  const quote = await preview.json();
+  expect(structuredClone(quote)).toMatchObject({
+    id: expect.any(String),
+    status: "quoted",
+    current_plan: "pro",
+    target_plan: "max",
+    interval: "monthly",
+    direction: "upgrade",
+    effective_at: null,
+    amount_due_estimate: { amount_minor: expect.any(Number), currency: "USD", tax_excluded: true },
+    recurring_price: { amount_minor: 10000, currency: "USD" },
+    expires_at: expect.any(String),
+    error: null,
+  });
+  expect(ctx.mutations()).toBe(0);
+  const receiptPath = `/v1/billing/subscription/changes/${quote.id}`;
+  const owned = await request(ctx.target, receiptPath, "GET", undefined, ctx.owner.token);
+  expect(await owned.json()).toEqual(quote);
+  expect(owned.status).toBe(200);
+  for (const response of [
+    await request(ctx.target, receiptPath, "GET", undefined, other.token),
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/change",
+      "POST",
+      { quote_id: quote.id },
+      other.token,
+    ),
+  ]) {
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "plan_change_not_found" },
+      request_id: null,
+    });
+  }
+  const confirm = () =>
+    request(
+      ctx.target,
+      "/v1/billing/subscription/change",
+      "POST",
+      { quote_id: quote.id },
+      ctx.owner.token,
+    );
+  const confirmations = await Promise.all([confirm(), confirm()]);
+  for (const response of confirmations) {
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ id: quote.id, status: "queued", error: null });
+  }
+  expect(ctx.mutations()).toBe(0);
+  expect(await processPlanChange(ctx.db, ctx.billing, ctx.policy)).toBe(true);
+  expect(await processPlanChange(ctx.db, ctx.billing, ctx.policy)).toBe(false);
+  expect(ctx.mutations()).toBe(1);
+  const applied = await request(ctx.target, receiptPath, "GET", undefined, ctx.owner.token);
+  expect(applied.status).toBe(200);
+  expect(await applied.json()).toMatchObject({ id: quote.id, status: "applied", error: null });
+  const repeated = await confirm();
+  expect(repeated.status).toBe(202);
+  expect(await repeated.json()).toMatchObject({ id: quote.id, status: "applied", error: null });
+  expect(ctx.mutations()).toBe(1);
+});
+
+test("subscription HTTP confirmation requires a fresh session without queuing a payment", async () => {
+  const ctx = await subscriptionApp();
+  await ctx.db.sql`UPDATE auth_session SET created_at=now()-interval '11 minutes'
+    WHERE user_id=${ctx.owner.id}`;
+  const preview = await request(
+    ctx.target,
+    "/v1/billing/subscription/preview",
+    "POST",
+    { plan: "max", interval: "monthly" },
+    ctx.owner.token,
+  );
+  expect(preview.status).toBe(200);
+  const quote = await preview.json();
+  const confirmation = await request(
+    ctx.target,
+    "/v1/billing/subscription/change",
+    "POST",
+    { quote_id: quote.id },
+    ctx.owner.token,
+  );
+  expect(confirmation.status).toBe(401);
+  expect(await confirmation.json()).toEqual({
+    error: { code: "reauthentication_required" },
+    request_id: null,
+  });
+  const receipt = await request(
+    ctx.target,
+    `/v1/billing/subscription/changes/${quote.id}`,
+    "GET",
+    undefined,
+    ctx.owner.token,
+  );
+  expect(receipt.status).toBe(200);
+  expect(await receipt.json()).toMatchObject({ status: "quoted", error: null });
+  expect(await processPlanChange(ctx.db, ctx.billing, ctx.policy)).toBe(false);
+  expect(ctx.mutations()).toBe(0);
+});
+
+test("subscription HTTP routes reject unauthenticated, malformed and unknown quote requests", async () => {
+  const ctx = await subscriptionApp();
+  const unauthorized = await request(ctx.target, "/v1/billing/subscription/preview", "POST", {
+    plan: "max",
+    interval: "monthly",
+  });
+  expect(unauthorized.status).toBe(401);
+  const malformed = [
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/preview",
+      "POST",
+      { plan: "max", interval: "week" },
+      ctx.owner.token,
+    ),
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/preview",
+      "POST",
+      { plan: "max", interval: "monthly", product_id: productId },
+      ctx.owner.token,
+    ),
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/change",
+      "POST",
+      { quote_id: "not-a-uuid" },
+      ctx.owner.token,
+    ),
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/change",
+      "POST",
+      { quote_id: crypto.randomUUID(), plan: "max" },
+      ctx.owner.token,
+    ),
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/changes/not-a-uuid",
+      "GET",
+      undefined,
+      ctx.owner.token,
+    ),
+    await ctx.target.request("http://localhost:3000/v1/billing/subscription/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${ctx.owner.token}` },
+      body: "{",
+    }),
+  ];
+  for (const response of malformed) {
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: { code: "invalid_request" }, request_id: null });
+  }
+  const unknown = crypto.randomUUID();
+  for (const response of [
+    await request(
+      ctx.target,
+      `/v1/billing/subscription/changes/${unknown}`,
+      "GET",
+      undefined,
+      ctx.owner.token,
+    ),
+    await request(
+      ctx.target,
+      "/v1/billing/subscription/change",
+      "POST",
+      { quote_id: unknown },
+      ctx.owner.token,
+    ),
+  ]) {
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "plan_change_not_found" },
+      request_id: null,
+    });
+  }
+  expect(
+    await ctx.db.sql`SELECT id FROM billing_plan_change WHERE user_id=${ctx.owner.id}`,
+  ).toHaveLength(0);
+  expect(ctx.mutations()).toBe(0);
+});
 
 test("public client config is unauthenticated, cacheable, and independent of database availability", async () => {
   const config = {

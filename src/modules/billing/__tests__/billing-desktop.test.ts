@@ -3,6 +3,7 @@ import { createCloudAccount, testPolicy } from "../../../../tests/support/cloud-
 import { testDatabase } from "../../../../tests/support/database";
 import { createDatabase } from "../../../platform/db";
 import { applyTopup } from "../../credits/grants";
+import { usageSummary } from "../../credits/ledger";
 import { registerPolicy } from "../../policy/policy";
 import { createBillingService } from "../desktop";
 import type { BillingProvider } from "../provider";
@@ -250,6 +251,68 @@ test("refund before the first grant durably rejects repeated stale paid observat
   expect((await fixture.db.sql`SELECT id FROM credit_grant WHERE user_id=${userId}`).length).toBe(
     0,
   );
+});
+
+test("partial refund revokes an unused top-up, requires review and remains idempotent", async () => {
+  const { userId } = await createCloudAccount(fixture.db);
+  const policy = testPolicy();
+  await registerPolicy(fixture.db, policy);
+  const order = {
+    id: crypto.randomUUID(),
+    userId,
+    productId,
+    paid: true,
+    refunded: false,
+    createdAt: new Date(),
+    policyRevision: policy.revision,
+  };
+  await applyTopup(fixture.db, policy, order);
+  const partial = { ...order, refunded: true, refundRequiresReview: true };
+  await Promise.all(Array.from({ length: 3 }, () => applyTopup(fixture.db, policy, partial)));
+  await applyTopup(fixture.db, policy, order);
+  const grants = await fixture.db.sql`SELECT amount::text,spent::text,held::text,revoked
+    FROM credit_grant WHERE user_id=${userId} AND kind='topup'`;
+  expect([...grants]).toEqual([{ amount: "30", spent: "0", held: "0", revoked: true }]);
+  expect(
+    await fixture.db.sql`SELECT order_id FROM billing_order_reversal WHERE order_id=${order.id}`,
+  ).toHaveLength(1);
+  await expect(usageSummary(fixture.db, policy, userId)).rejects.toMatchObject({
+    code: "billing_review_required",
+    status: 403,
+  });
+  expect((await usageSummary(fixture.db, policy, userId, true)).purchased_remaining).toBe("0");
+});
+
+test("partial refund before the first grant preserves a tombstone without suspending or resurrecting credit", async () => {
+  const { userId } = await createCloudAccount(fixture.db);
+  const policy = testPolicy();
+  await registerPolicy(fixture.db, policy);
+  const order = {
+    id: crypto.randomUUID(),
+    userId,
+    productId,
+    paid: true,
+    refunded: false,
+    createdAt: new Date(),
+    policyRevision: policy.revision,
+  };
+  const partial = { ...order, refunded: true, refundRequiresReview: true };
+  await applyTopup(fixture.db, policy, partial);
+  await Promise.all([
+    applyTopup(fixture.db, policy, partial),
+    applyTopup(fixture.db, policy, order),
+    applyTopup(fixture.db, policy, order),
+  ]);
+  expect(
+    await fixture.db.sql`SELECT order_id FROM billing_order_reversal WHERE order_id=${order.id}`,
+  ).toHaveLength(1);
+  expect(
+    await fixture.db.sql`SELECT id FROM credit_grant WHERE user_id=${userId} AND kind='topup'`,
+  ).toHaveLength(0);
+  const [wallet] = await fixture.db
+    .sql`SELECT suspended FROM credit_wallet WHERE user_id=${userId}`;
+  expect(wallet?.suspended).toBe(false);
+  expect((await usageSummary(fixture.db, policy, userId)).purchased_remaining).toBe("0");
 });
 
 test("a paid refresh fetched before a worker refund cannot resurrect credit", async () => {
