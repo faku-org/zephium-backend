@@ -31,7 +31,7 @@ signal.signal(signal.SIGTERM,interrupted)
 signal.signal(signal.SIGINT,interrupted)
 
 def command(argv,timeout=60,check=True,input_text=None):
-    result=subprocess.run(argv,input=input_text,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,check=False)
+    result=subprocess.run(argv,input=input_text,text=True,errors="replace",stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,check=False)
     if check and result.returncode:raise RuntimeError('command_failed')
     return result
 
