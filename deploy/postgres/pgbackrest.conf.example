@@ -1,12 +1,13 @@
 [global]
 repo1-type=s3
-repo1-path=/zephium/postgres
-repo1-s3-endpoint=ACCOUNT_ID.r2.cloudflarestorage.com
-repo1-s3-bucket=zephium-backups
-repo1-s3-region=auto
+repo1-path=/zephium/production/postgres
+repo1-s3-endpoint=nbg1.your-objectstorage.com
+repo1-s3-bucket=YOUR_PRIVATE_BACKUP_BUCKET
+repo1-s3-region=nbg1
 repo1-s3-uri-style=path
 repo1-retention-full=5
 repo1-retention-diff=30
+repo1-retention-history=45
 repo1-cipher-type=aes-256-cbc
 # Supply repo1-s3-key, repo1-s3-key-secret and repo1-cipher-pass via a 0600 secret config.
 start-fast=y

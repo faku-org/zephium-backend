@@ -28,9 +28,9 @@ Use external uptime checks and a private `OPERATIONS_WEBHOOK` for alerts. Watch 
 
 ## Back up and restore
 
-Use a private [pgBackRest configuration](../deploy/postgres/pgbackrest.conf.example) with bucket-scoped storage credentials and repository encryption. Keep the encryption passphrase in separate recovery custody. The policy and backup configuration are read-only host mounts; ensure the intended container user can read them.
+Follow the [encrypted backup runbook](../deploy/backups/README.md) for retention, off-server qualification and production scheduling. Use a private [pgBackRest configuration](../deploy/postgres/pgbackrest.conf.example) with bucket-scoped storage credentials and repository encryption. Keep the encryption passphrase in separate recovery custody. The policy and backup configuration are read-only host mounts; ensure the intended container user can read them.
 
-Initialize and check archival, then take a first full backup. For staging:
+Initialize and check archival, then take a first full backup. The following is an opt-in example for operators who back up staging; Zephium's disposable staging environment currently leaves archival disabled:
 
 ```sh
 docker compose --env-file /etc/zephium-staging/staging.env -f deploy/compose.staging.yaml exec -u postgres postgres pgbackrest --stanza=zephium stanza-create

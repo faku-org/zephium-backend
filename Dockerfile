@@ -13,7 +13,7 @@ COPY package.json LICENSE COMMERCIAL-LICENSING.md ./
 COPY src ./src
 COPY config ./config
 COPY migrations ./migrations
-COPY scripts/migrate.ts scripts/cloud-policy.ts ./scripts/
+COPY scripts/migrate.ts scripts/cloud-policy.ts scripts/notify.ts ./scripts/
 USER bun
 ENV NODE_ENV=production PORT=3000
 EXPOSE 3000

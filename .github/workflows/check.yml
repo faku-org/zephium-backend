@@ -18,6 +18,10 @@ jobs:
       - run: bun test --timeout 60000
       - name: Validate disabled deployment policy
         run: bun scripts/cloud-policy.ts validate config/cloud.json && bun scripts/cloud-policy.ts validate config/self-host.json && bun scripts/cloud-policy.ts validate config/staging.json
+      - name: Verify backup scheduling boundaries
+        run: |
+          bash -n deploy/backups/common.sh deploy/backups/backup.sh deploy/backups/monitor.sh deploy/backups/alert.sh
+          python3 deploy/backups/test_backups.py
       - name: Verify encrypted database backup restoration
         run: bun scripts/container-check.ts
       - name: Verify self-host Compose stack and private roles

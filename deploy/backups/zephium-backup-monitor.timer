@@ -1,0 +1,10 @@
+[Unit]
+Description=Zephium backup monitor every 15 minutes (UTC)
+
+[Timer]
+OnCalendar=*-*-* *:00/15:00 UTC
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

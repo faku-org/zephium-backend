@@ -1,0 +1,11 @@
+[Unit]
+Description=Zephium daily differential backup except Sunday (UTC)
+
+[Timer]
+OnCalendar=Mon..Sat *-*-* 02:15:00 UTC
+Unit=zephium-backup@diff.service
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

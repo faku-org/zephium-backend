@@ -1,0 +1,13 @@
+# Nonsecret host selectors. Install as /etc/zephium-backups/config, root:root 0600.
+# Literal unquoted KEY=value only. No shell expansion, deployment env or credentials.
+# Exact com.docker.compose.project label value from the production Coolify resource.
+COMPOSE_PROJECT_UUID=REPLACE_WITH_EXACT_PRODUCTION_PROJECT_UUID
+POSTGRES_SERVICE=postgres
+WORKER_SERVICE=worker
+PGBACKREST_STANZA=zephium
+POSTGRES_DATABASE=zephium
+POSTGRES_USER=zephium_owner
+# Required, reviewed upper bound; example 4 GiB, not an observed production baseline.
+MAX_WAL_BYTES=4294967296
+# Filesystem containing the real PostgreSQL volume; replace if volumes live elsewhere.
+HOST_DISK_PATH=/var/lib/docker

@@ -1,0 +1,21 @@
+[Unit]
+Description=Zephium bounded %i backup notification
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+StateDirectory=zephium-backups
+StateDirectoryMode=0700
+ExecStart=/usr/local/libexec/zephium-backups/alert.sh %i /etc/zephium-backups/config
+TimeoutStartSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/zephium-backups
+StandardOutput=journal
+StandardError=null

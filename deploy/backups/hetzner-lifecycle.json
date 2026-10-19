@@ -1,0 +1,53 @@
+{
+  "Rules": [
+    {
+      "Expiration": {
+        "ExpiredObjectDeleteMarker": true
+      },
+      "ID": "zephium-production-delete-markers",
+      "Filter": {
+        "Prefix": "zephium/production/postgres/"
+      },
+      "Status": "Enabled"
+    },
+    {
+      "ID": "zephium-production-version-cleanup",
+      "Filter": {
+        "Prefix": "zephium/production/postgres/"
+      },
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    },
+    {
+      "Expiration": {
+        "ExpiredObjectDeleteMarker": true
+      },
+      "ID": "zephium-qualification-delete-markers",
+      "Filter": {
+        "Prefix": "zephium/qualification/"
+      },
+      "Status": "Enabled"
+    },
+    {
+      "Expiration": {
+        "Days": 2
+      },
+      "ID": "zephium-qualification-expiration",
+      "Filter": {
+        "Prefix": "zephium/qualification/"
+      },
+      "Status": "Enabled",
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}
