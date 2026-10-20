@@ -635,3 +635,86 @@ test("a dispatched Max included reservation still settles after downgrade", asyn
     .sql`SELECT spent::text,held::text FROM credit_grant WHERE user_id=${ctx.userId} AND kind='included' AND plan_id='max'`;
   expect(grant).toEqual({ spent: "3", held: "0" });
 });
+
+test("customer margin tariffs debit exact sub-credit units independently of provider cost rates", async () => {
+  const isolated = await testDatabase();
+  try {
+    const base = testPolicy();
+    const original = required(base.models[0]);
+    const policy = testPolicy({
+      models: [
+        {
+          ...original,
+          rates: { ...original.rates, input: "3000000", output: "6000000" },
+          costRates: { ...original.rates },
+        },
+      ],
+      limits: {
+        ...base.limits,
+        budgets: {
+          scope: "customer-margin-test",
+          dailyUsdMicros: "1000000",
+          totalUsdMicros: "1000000",
+          freeDailyUsdMicros: "1000000",
+        },
+      },
+    });
+    await registerPolicy(isolated.db, policy);
+    const owner = await createCloudAccount(isolated.db);
+    const model = required(policy.models[0]);
+    const request = await openRequest(
+      isolated.db,
+      policy,
+      model,
+      owner.userId,
+      owner.sessionId,
+      crypto.randomUUID(),
+      "/v1/chat/completions",
+    );
+    const costRates = required(model.costRates);
+    const customerHold = holdCost(1, 1, 0, model.rates);
+    const providerHold = holdCost(1, 1, 0, costRates);
+    await reserveRequest(
+      isolated.db,
+      policy,
+      model,
+      request.id,
+      owner.userId,
+      owner.sessionId,
+      customerHold,
+      1,
+      providerHold,
+    );
+    await markDispatched(isolated.db, request.id, owner.userId, owner.sessionId);
+    const usage = { ...emptyUsage(), input: 1, output: 1 };
+    expect(charge(usage, model.rates)).toBe(9n);
+    expect(charge(usage, costRates)).toBe(4n);
+    await settleRequest(isolated.db, request.id, owner.userId, usage, 200, null);
+    expect(
+      (
+        await isolated.db
+          .sql`SELECT state,charged::text,actual_cost::text FROM cloud_request WHERE id=${request.id}`
+      )[0],
+    ).toMatchObject({ state: "settled", charged: "9", actual_cost: "9" });
+    expect(
+      (
+        await isolated.db
+          .sql`SELECT exposure::text,terminal FROM cloud_cost_record WHERE request_id=${request.id}`
+      )[0],
+    ).toMatchObject({ exposure: "4", terminal: true });
+    const summary = await usageSummary(isolated.db, policy, owner.userId);
+    expect(summary).toMatchObject({
+      unit_scale: 1000000,
+      credit_units: "10000",
+      credits_remaining: "111",
+    });
+    expect(
+      (
+        await isolated.db
+          .sql`SELECT sum(spent)::text AS spent FROM credit_grant WHERE user_id=${owner.userId}`
+      )[0]?.spent,
+    ).toBe("9");
+  } finally {
+    await isolated.close();
+  }
+});

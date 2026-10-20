@@ -3,6 +3,7 @@ import type { Database } from "../../platform/db";
 import { AppError, operationalEvent } from "../../platform/errors";
 import { type CloudPolicy, type Model, type Rates, requestDuration } from "../policy";
 import { reserveBudget, settleBudget } from "./budget";
+import { creditUnits, unitsPerUsd } from "./denomination";
 import { accountContext, availableGrants, type Tx } from "./grants";
 import { charge, type Usage } from "./pricing";
 
@@ -402,6 +403,7 @@ export async function usageSummary(db: Database, p: CloudPolicy, userId: string,
       policy_revision: p.revision,
       plan: ctx.plan.id,
       unit_scale: 1000000,
+      credit_units: creditUnits,
       credits_remaining: free.toString(),
       reserved_units: (total - free).toString(),
       period_end: ctx.period.end?.toISOString() ?? null,
@@ -436,7 +438,7 @@ export async function usageSummary(db: Database, p: CloudPolicy, userId: string,
         p.creditCurrency === "USD"
           ? {
               currency: "USD",
-              amount: `${purchased / 1000000n}.${(purchased % 1000000n).toString().padStart(6, "0")}`,
+              amount: `${purchased / unitsPerUsd}.${(purchased % unitsPerUsd).toString().padStart(6, "0")}`,
             }
           : null,
     };

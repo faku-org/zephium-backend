@@ -248,10 +248,20 @@ test("cloud HTTP prefixes require a verified signed session and catalog eligible
       plan_min: string;
       tier: string;
       description: string;
+      price: {
+        unit_scale: number;
+        credit_units: string;
+        per_million_tokens: { input: string; output: string };
+      };
       limits: { max_request_bytes: number; idle_timeout_ms: number; max_duration_ms: number };
     }[];
   };
   expect(listed.defaults).toMatchObject({ lead: "test-model", page: null, light: null });
+  expect(listed.models.find((model) => model.id === "test-model")?.price).toMatchObject({
+    unit_scale: 1000000,
+    credit_units: "10000",
+    per_million_tokens: { input: openai.rates.input, output: openai.rates.output },
+  });
   expect(listed.models.find((model) => model.id === "paid-model")).toMatchObject({
     available: false,
     plan_min: "pro",
@@ -326,6 +336,7 @@ test("fragmented native SSE reaches the caller before final usage settles exactl
       request_id: id,
       usage: "settled",
       charged: "10",
+      credit_units: "10000",
     });
     expect(await row(id)).toMatchObject({ state: "settled", charged: "10" });
   } finally {
@@ -402,10 +413,10 @@ test("terminal missing usage stays pending; truncated and failed streams append 
   expect(missing.status).toBe(200);
   const missingWire = await missing.text();
   const missingId = required(missing.headers.get("x-zephium-request-id"));
-  expect(trailerAfter(missingWire, delta + noUsage)).toMatchObject({
-    request_id: missingId,
-    usage: "pending",
-  });
+  const pendingTrailer = trailerAfter(missingWire, delta + noUsage);
+  expect(pendingTrailer).toEqual({ request_id: missingId, usage: "pending" });
+  expect(pendingTrailer).not.toHaveProperty("credit_units");
+  expect(pendingTrailer).not.toHaveProperty("charged");
   expect(await row(missingId)).toMatchObject({ state: "usage_unknown", charged: "0" });
   await expireHold(missingId);
   expect(await row(missingId)).toMatchObject({ state: "released", charged: "0" });
@@ -421,6 +432,7 @@ test("terminal missing usage stays pending; truncated and failed streams append 
     error: "stream_incomplete",
   });
   expect(truncatedWire).not.toContain("lost");
+  expect(trailerAfter(truncatedWire, delta)).not.toHaveProperty("credit_units");
   expect(await row(truncatedId)).toMatchObject({ state: "usage_unknown", charged: "0" });
   await expireHold(truncatedId);
 
@@ -599,7 +611,7 @@ test("upstream bytes reset idle timeout but the model duration remains a cap", a
     expect((idleWire.match(/: provider ping\n\n/g) ?? []).length).toBeGreaterThanOrEqual(3);
     expect(idleWire).toContain(terminal);
     expect(idleWire).toMatch(
-      /: zephium \{"request_id":"[^"]+","usage":"settled","charged":"10"\}\n\n$/,
+      /: zephium \{"request_id":"[^"]+","usage":"settled","charged":"10","credit_units":"10000"\}\n\n$/,
     );
     expect(await row(idleId)).toMatchObject({ state: "settled", charged: "10" });
 

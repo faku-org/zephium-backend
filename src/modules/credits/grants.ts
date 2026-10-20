@@ -179,6 +179,11 @@ export async function applyTopup(
   },
 ) {
   await db.sql.begin(async (tx) => {
+    // Share the registration fence without granting runtime roles policy-table writes.
+    // Concurrent settlements coexist; registration waits before checking legacy balances.
+    await tx`SELECT pg_advisory_xact_lock_shared(91843722)`;
+    const [activePolicy] = await tx`SELECT p.configuration FROM cloud_active_policy a
+      JOIN cloud_policy p ON p.revision=a.revision WHERE a.singleton=true`;
     const [account] = await tx`SELECT lifecycle FROM auth_user WHERE id=${order.userId} FOR SHARE`;
     if (!account) return;
     await tx`INSERT INTO credit_wallet(user_id) VALUES (${order.userId}) ON CONFLICT DO NOTHING`;
@@ -217,6 +222,11 @@ export async function applyTopup(
     const historical = record.configuration as CloudPolicy;
     const product = historical.topups.find((p) => p.productId === order.productId);
     if (!product) return;
+    if (
+      (activePolicy?.configuration as CloudPolicy | undefined)?.creditCurrency === "USD" &&
+      historical.creditCurrency !== "USD"
+    )
+      throw new AppError("purchase_policy_unavailable", 503);
     const expiry =
       product.expiresDays === null
         ? null

@@ -18,7 +18,7 @@ When billing is disabled, `GET /v1/billing` gives `offers:null`, `paid:false`, a
 
 Fetch `GET /v1/models` and `GET /v1/usage` after authentication. The catalog includes `defaults` for lead/page/light/decision/transcribe, a per-model `available` flag, description, tier, policy price strings, and byte/search/timeout limits. A listed locked model remains visible for explanation but must not be sent to generation. If a default is null, let the user choose an available model or disable that role. The default production policy starts disabled; the separate staging template is not deployment or availability proof.
 
-Display usage by dividing decimal-string microcredit values by `unit_scale` for presentation, while retaining strings for accounting. Show included `allowance.*_units`, welcome `bonus_remaining` and expiry, purchased balance, held units, period end, and optional daily cap distinctly. Use `GET /v1/usage/requests` with its opaque cursor for caller-owned history, at most 50 entries per page; use the per-request receipt when generation outcome is uncertain. Treat a charge as final only in `settled` state.
+Display credits by dividing decimal-string accounting-unit values by `credit_units` (`"10000"`), while retaining integer strings for accounting. Keep `unit_scale` compatibility handling separate; do not divide by it to display credits. Show included `allowance.*_units`, welcome `bonus_remaining` and expiry, purchased balance, held units, period end, and optional daily cap distinctly. Use `GET /v1/usage/requests` with its opaque cursor for caller-owned history, at most 50 entries per page; use the per-request receipt when generation outcome is uncertain. Treat a charge as final only in `settled` state.
 
 In self-hosted mode, policy `selfHostedPlan` can grant a configured plan without Polar. Billing still reports no Zephium purchase flow while `capabilities.hostedAI` can be true. Keep hosted API keys server-side; catalog and usage responses must never be treated as credential sources. Direct BYOK calls remain separate on the desktop.
 
@@ -99,3 +99,13 @@ Keep these client behaviors in the final UI pass:
 - Verify native text/voice receipts, request IDs, SSE trailers, idempotency handling, plan-required/insufficient-credit/daily-limit responses, and Retry-After using the existing API shapes. This update adds no new endpoint or response shape; it corrects export/contact behavior and extends the existing review error to purchasing boundaries.
 
 Staging spending ceilings remain USD50 total, USD10 per UTC day and USD5 daily free subsidy. Effective signup protection is three new accounts per IP/day with disposable-email blocking; the allowlist remains enabled. Do not run deliberate spend-exhaustion or capacity campaigns.
+
+## Credit decision — 2026-10-20
+
+The approved conversion is 10,000 accounting units per credit, with 100 credits per USD1 of usage-credit face value under a USD-denominated policy. The additive `credit_units:"10000"` field is provided on usage, model price, billing offers, usage-history envelope, individual receipt and settled SSE trailer. Native provider responses and currency `amount_minor` fields are unchanged. Do not round individual charges to a whole credit.
+
+Provisional next-policy fixtures are Free250 credits once (2,500,000 units), Pro2,000/month (20,000,000), Max10,000/month (100,000,000), and USD1 top-up100 credits (1,000,000). Existing grants retain their original amounts; there is no automatic trial refill. Retail model tariffs can include margin independently of provider cost safeguards. Final allowance sizes and margin await the measured cost review.
+
+This section describes the repository change and the prepared next policy, not a live deployment. The October19 staging snapshot above remains historical. Currency activation must wait for legacy checkout windows and reconciliation; `purchased_balance` stays null on the current undeclared-currency policy. Do not treat an old USD1/2,000,000-unit test offer as the new retail conversion.
+
+For cost reconciliation, account usage includes all hosted calls charged to that account, regardless of lead/page/light role. The ledger has no Work-run or role labels. Supply only request IDs and a UTC range for a role-specific comparison; never send prompts, page content or outputs. Customer charges, provider-cost estimates and actual provider invoices are distinct. Reasoning tokens are already included in output and must not be charged twice.

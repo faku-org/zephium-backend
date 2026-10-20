@@ -2,7 +2,7 @@ import { enforce, privateKey } from "../../platform/abuse";
 import type { Config } from "../../platform/config";
 import type { Database, Tx } from "../../platform/db";
 import { AppError } from "../../platform/errors";
-import { applyTopup, assertPurchaseAllowed } from "../credits";
+import { applyTopup, assertPurchaseAllowed, creditUnits, unitsPerUsd } from "../credits";
 import type { CloudPolicy } from "../policy";
 import { createPlanChangeService, pendingPlanChange } from "./plan-changes";
 import type {
@@ -48,6 +48,21 @@ export function createBillingService(
   policy: CloudPolicy | null,
 ) {
   const enabled = config.BILLING_ENABLED === "true";
+  function assertTopupDenomination(productId: string, offer: ProductOffer) {
+    if (policy?.creditCurrency !== "USD") return;
+    const topup = policy.topups.find((item) => item.productId === productId);
+    const minor = offer.price.amount_minor;
+    if (
+      !topup ||
+      offer.productId !== productId ||
+      offer.price.currency !== "USD" ||
+      !Number.isSafeInteger(minor) ||
+      minor <= 0 ||
+      BigInt(topup.units) !== (BigInt(minor) * unitsPerUsd) / 100n
+    )
+      throw new AppError("product_configuration_invalid", 503);
+  }
+
   async function offers() {
     if (!policy) throw new AppError("product_not_configured", 503);
     const offer = provider.productOffer;
@@ -92,6 +107,7 @@ export function createBillingService(
       topups: policy.topups.map((t) => {
         const product = details[index++];
         if (!product || product.productId !== t.productId) throw unavailable();
+        assertTopupDenomination(t.productId, product);
         return {
           id: t.id,
           units: t.units,
@@ -101,6 +117,7 @@ export function createBillingService(
         };
       }),
       unit_scale: 1_000_000,
+      credit_units: creditUnits,
     };
   }
 
@@ -218,6 +235,16 @@ export function createBillingService(
       if (state && state.accountId !== userId)
         throw new AppError("provider_identity_mismatch", 503);
       if (state?.subscriptions.length) throw new AppError("subscription_change_required", 409);
+    }
+    if (purchase.kind === "topup" && policy?.creditCurrency === "USD") {
+      if (!provider.productOffer) throw unavailable();
+      let offer: ProductOffer;
+      try {
+        offer = await provider.productOffer(productId, purchase, { fresh: true });
+      } catch (error) {
+        providerFailure(error);
+      }
+      assertTopupDenomination(productId, offer);
     }
     // Commit the deletion barrier before remote mutation. A lost create response is
     // recovered by the worker's open-checkout listing after this conservative horizon.

@@ -454,7 +454,7 @@
             }
           }
         },
-        "description": "Integer microcredit units; unit_scale is 1000000."
+        "description": "Integer accounting units; credit_units is 10000. Legacy unit_scale remains 1000000."
       }
     },
     "/v1/usage/limits": {
@@ -477,7 +477,7 @@
                       {
                         "type": "string",
                         "pattern": "^(0|[1-9][0-9]{0,14})$",
-                        "description": "Integer microcredit units as a decimal string"
+                        "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                       },
                       {
                         "type": "null"
@@ -1951,32 +1951,32 @@
                   "input": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]{0,14})$",
-                    "description": "Integer microcredit units as a decimal string"
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                   },
                   "cached_input": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]{0,14})$",
-                    "description": "Integer microcredit units as a decimal string"
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                   },
                   "cache_write_5m": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]{0,14})$",
-                    "description": "Integer microcredit units as a decimal string"
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                   },
                   "cache_write_1h": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]{0,14})$",
-                    "description": "Integer microcredit units as a decimal string"
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                   },
                   "output": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]{0,14})$",
-                    "description": "Integer microcredit units as a decimal string"
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                   },
                   "audio_input": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]{0,14})$",
-                    "description": "Integer microcredit units as a decimal string"
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                   }
                 },
                 "required": [
@@ -1991,18 +1991,24 @@
               "per_search_call": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]{0,14})$",
-                "description": "Integer microcredit units as a decimal string"
+                "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
               },
               "per_audio_minute": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]{0,14})$",
-                "description": "Integer microcredit units as a decimal string"
+                "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+              },
+              "credit_units": {
+                "type": "string",
+                "const": "10000",
+                "description": "Accounting units per displayed credit; preserve fractional credits and integer ledger amounts."
               }
             },
             "required": [
               "unit_scale",
               "per_million_tokens",
-              "per_search_call"
+              "per_search_call",
+              "credit_units"
             ],
             "additionalProperties": false
           },
@@ -2190,12 +2196,12 @@
           "credits_remaining": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "reserved_units": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "period_end": {
             "oneOf": [
@@ -2211,14 +2217,14 @@
           "spent_today": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "daily_limit_units": {
             "oneOf": [
               {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]{0,14})$",
-                "description": "Integer microcredit units as a decimal string"
+                "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
               },
               {
                 "type": "null"
@@ -2236,7 +2242,7 @@
                 "units": {
                   "type": "string",
                   "pattern": "^(0|[1-9][0-9]{0,14})$",
-                  "description": "Integer microcredit units as a decimal string"
+                  "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                 },
                 "requests": {
                   "type": "integer"
@@ -2256,17 +2262,17 @@
               "total_units": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]{0,14})$",
-                "description": "Integer microcredit units as a decimal string"
+                "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
               },
               "used_units": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]{0,14})$",
-                "description": "Integer microcredit units as a decimal string"
+                "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
               },
               "reserved_units": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]{0,14})$",
-                "description": "Integer microcredit units as a decimal string"
+                "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
               },
               "renews": {
                 "type": "boolean"
@@ -2293,12 +2299,12 @@
           "purchased_remaining": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "bonus_remaining": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "bonus_expires_at": {
             "oneOf": [
@@ -2341,6 +2347,11 @@
                 "additionalProperties": false
               }
             ]
+          },
+          "credit_units": {
+            "type": "string",
+            "const": "10000",
+            "description": "Accounting units per displayed credit; preserve fractional credits and integer ledger amounts."
           }
         },
         "required": [
@@ -2359,7 +2370,8 @@
           "purchased_remaining",
           "bonus_remaining",
           "bonus_expires_at",
-          "purchased_balance"
+          "purchased_balance",
+          "credit_units"
         ],
         "additionalProperties": false
       },
@@ -2382,12 +2394,12 @@
           "reserved": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "charged": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]{0,14})$",
-            "description": "Integer microcredit units as a decimal string"
+            "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
           },
           "error_class": {
             "oneOf": [
@@ -2425,6 +2437,11 @@
               "mixed",
               null
             ]
+          },
+          "credit_units": {
+            "type": "string",
+            "const": "10000",
+            "description": "Accounting units per displayed credit; preserve fractional credits and integer ledger amounts."
           }
         },
         "required": [
@@ -2436,7 +2453,8 @@
           "charged",
           "error_class",
           "started_at",
-          "finished_at"
+          "finished_at",
+          "credit_units"
         ],
         "additionalProperties": false
       },
@@ -2719,7 +2737,7 @@
                         "units": {
                           "type": "string",
                           "pattern": "^(0|[1-9][0-9]{0,14})$",
-                          "description": "Integer microcredit units as a decimal string"
+                          "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                         },
                         "expires_days": {
                           "oneOf": [
@@ -2766,12 +2784,18 @@
                   },
                   "unit_scale": {
                     "const": 1000000
+                  },
+                  "credit_units": {
+                    "type": "string",
+                    "const": "10000",
+                    "description": "Accounting units per displayed credit; preserve fractional credits and integer ledger amounts."
                   }
                 },
                 "required": [
                   "subscriptions",
                   "topups",
-                  "unit_scale"
+                  "unit_scale",
+                  "credit_units"
                 ],
                 "additionalProperties": false
               },
@@ -2902,12 +2926,12 @@
                 "units": {
                   "type": "string",
                   "pattern": "^(0|[1-9][0-9]{0,14})$",
-                  "description": "Integer microcredit units as a decimal string"
+                  "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                 },
                 "reserved": {
                   "type": "string",
                   "pattern": "^(0|[1-9][0-9]{0,14})$",
-                  "description": "Integer microcredit units as a decimal string"
+                  "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
                 },
                 "started_at": {
                   "type": "string",
@@ -2958,11 +2982,17 @@
                 "type": "null"
               }
             ]
+          },
+          "credit_units": {
+            "type": "string",
+            "const": "10000",
+            "description": "Accounting units per displayed credit; preserve fractional credits and integer ledger amounts."
           }
         },
         "required": [
           "requests",
-          "next_cursor"
+          "next_cursor",
+          "credit_units"
         ],
         "additionalProperties": false
       },

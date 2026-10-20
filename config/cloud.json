@@ -338,5 +338,6 @@
       "decision": null,
       "transcribe": null
     }
-  }
+  },
+  "creditCurrency": "USD"
 }

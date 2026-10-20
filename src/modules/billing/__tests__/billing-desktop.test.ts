@@ -75,6 +75,7 @@ test("offers use provider prices, and portal requires an existing customer", asy
   const policy = testPolicy();
   const service = createBillingService(enabledConfig(), fixture.db, provider(), policy);
   const view = await service.get(userId);
+  expect(view.offers).toMatchObject({ unit_scale: 1000000, credit_units: "10000" });
   expect(view.offers?.topups[0]).toEqual({
     id: "test-topup",
     units: "30",
@@ -657,5 +658,177 @@ test("spent-refund suspension blocks top-up and subscription checkout before any
     expect(
       await fixture.db.sql`SELECT checkout_id FROM billing_checkout WHERE user_id=${userId}`,
     ).toHaveLength(0);
+  }
+});
+
+test("USD top-ups bind one listed dollar to one million units and read fresh pricing before checkout", async () => {
+  const isolated = await testDatabase();
+  try {
+    const base = testPolicy();
+    const topup = base.topups[0];
+    if (!topup) throw new Error("Missing fixture top-up");
+    const policy = testPolicy({ creditCurrency: "USD", topups: [{ ...topup, units: "1000000" }] });
+    await registerPolicy(isolated.db, policy);
+    const owner = await createCloudAccount(isolated.db);
+    const freshReads: boolean[] = [];
+    let checkouts = 0;
+    const service = createBillingService(
+      enabledConfig(),
+      isolated.db,
+      provider({
+        productOffer: async (id, _purchase, options) => {
+          freshReads.push(options?.fresh ?? false);
+          return {
+            productId: id,
+            productName: "100 credits",
+            price: { amount_minor: 100, currency: "USD" },
+          };
+        },
+        checkout: async () => {
+          checkouts++;
+          return {
+            id: crypto.randomUUID(),
+            url: "https://sandbox.polar.sh/checkout/test",
+            expiresAt: new Date(Date.now() + 3600_000),
+          };
+        },
+      }),
+      policy,
+    );
+    const view = await service.get(owner.userId);
+    expect(view.offers).toMatchObject({ unit_scale: 1000000, credit_units: "10000" });
+    expect(view.offers?.topups[0]).toMatchObject({
+      units: "1000000",
+      price: { amount_minor: 100, currency: "USD" },
+    });
+    expect(BigInt(view.offers?.topups[0]?.units ?? "0") / 10000n).toBe(100n);
+    expect(
+      (
+        await service.startCheckout(owner.userId, `${owner.userId}@example.test`, {
+          topup: topup.id,
+        })
+      ).url,
+    ).toBe("https://sandbox.polar.sh/checkout/test");
+    expect(checkouts).toBe(1);
+    expect(freshReads).toEqual([false, true]);
+  } finally {
+    await isolated.close();
+  }
+});
+
+test("USD mismatched denomination or fresh price fails before checkout mutation and barriers", async () => {
+  const isolated = await testDatabase();
+  try {
+    const base = testPolicy();
+    const topup = base.topups[0];
+    if (!topup) throw new Error("Missing fixture top-up");
+    for (const mode of ["legacy-two-million", "fresh-price-change", "non-usd"]) {
+      const policy = testPolicy({
+        creditCurrency: "USD",
+        topups: [{ ...topup, units: mode === "legacy-two-million" ? "2000000" : "1000000" }],
+      });
+      await registerPolicy(isolated.db, policy);
+      const owner = await createCloudAccount(isolated.db);
+      const freshReads: boolean[] = [];
+      let checkouts = 0;
+      const service = createBillingService(
+        enabledConfig(),
+        isolated.db,
+        provider({
+          productOffer: async (id, _purchase, options) => {
+            freshReads.push(options?.fresh ?? false);
+            return {
+              productId: id,
+              productName: "Synthetic credits",
+              price: {
+                amount_minor: mode === "fresh-price-change" && options?.fresh ? 200 : 100,
+                currency: mode === "non-usd" ? "EUR" : "USD",
+              },
+            };
+          },
+          checkout: async () => {
+            checkouts++;
+            throw new Error("Mismatched top-up must not create checkout");
+          },
+        }),
+        policy,
+      );
+      if (mode === "fresh-price-change")
+        expect((await service.get(owner.userId)).offers).not.toBeNull();
+      else
+        await expect(service.get(owner.userId)).rejects.toMatchObject({
+          code: "product_configuration_invalid",
+          status: 503,
+        });
+      const [before] = await isolated.db
+        .sql`SELECT provider_touched,checkout_until,subscription_checkout_until,requested,processed
+        FROM billing_customer WHERE user_id=${owner.userId}`;
+      await expect(
+        service.startCheckout(owner.userId, `${owner.userId}@example.test`, { topup: topup.id }),
+      ).rejects.toMatchObject({
+        code: "product_configuration_invalid",
+        status: 503,
+      });
+      expect(freshReads.at(-1)).toBe(true);
+      expect(checkouts).toBe(0);
+      expect(
+        (
+          await isolated.db
+            .sql`SELECT provider_touched,checkout_until,subscription_checkout_until,requested,processed
+        FROM billing_customer WHERE user_id=${owner.userId}`
+        )[0],
+      ).toEqual(before);
+      expect(
+        await isolated.db
+          .sql`SELECT checkout_id FROM billing_checkout WHERE user_id=${owner.userId}`,
+      ).toHaveLength(0);
+    }
+  } finally {
+    await isolated.close();
+  }
+});
+
+test("legacy arbitrary-credit top-ups remain purchasable without declaring dollar denomination", async () => {
+  const isolated = await testDatabase();
+  try {
+    const policy = testPolicy();
+    await registerPolicy(isolated.db, policy);
+    const owner = await createCloudAccount(isolated.db);
+    let checkouts = 0;
+    const service = createBillingService(
+      enabledConfig(),
+      isolated.db,
+      provider({
+        productOffer: async (id) => ({
+          productId: id,
+          productName: "Legacy credits",
+          price: { amount_minor: 100, currency: "USD" },
+        }),
+        checkout: async () => {
+          checkouts++;
+          return {
+            id: crypto.randomUUID(),
+            url: "https://sandbox.polar.sh/checkout/legacy",
+            expiresAt: new Date(Date.now() + 3600_000),
+          };
+        },
+      }),
+      policy,
+    );
+    expect((await service.get(owner.userId)).offers?.topups[0]).toMatchObject({
+      units: "30",
+      price: { amount_minor: 100 },
+    });
+    expect(
+      (
+        await service.startCheckout(owner.userId, `${owner.userId}@example.test`, {
+          topup: "test-topup",
+        })
+      ).url,
+    ).toBe("https://sandbox.polar.sh/checkout/legacy");
+    expect(checkouts).toBe(1);
+    expect((await usageSummary(isolated.db, policy, owner.userId)).purchased_balance).toBeNull();
+  } finally {
+    await isolated.close();
   }
 });

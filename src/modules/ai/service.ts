@@ -3,6 +3,7 @@ import type { Database } from "../../platform/db";
 import { AppError, errorResponse, operationalEvent } from "../../platform/errors";
 import {
   accountContext,
+  creditUnits,
   holdCost,
   markDispatched,
   openRequest,
@@ -118,6 +119,7 @@ export function createCloudService(
           },
           price: {
             unit_scale: 1000000,
+            credit_units: creditUnits,
             per_million_tokens: {
               input: m.rates.input,
               cached_input: m.rates.cachedInput,
@@ -371,7 +373,9 @@ export function createCloudService(
                 : {
                     request_id: id,
                     usage: receipt?.state === "settled" ? "settled" : "pending",
-                    ...(receipt?.state === "settled" ? { charged: receipt.charged } : {}),
+                    ...(receipt?.state === "settled"
+                      ? { charged: receipt.charged, credit_units: creditUnits }
+                      : {}),
                   };
               if (error !== "client_disconnected")
                 controller?.enqueue(encoder.encode(`\n\n: zephium ${JSON.stringify(trailer)}\n\n`));

@@ -34,15 +34,22 @@ afterAll(async () => {
 test("credit history paginates equal timestamps without duplication and scopes every query to its owner", async () => {
   const expected = [...ids].sort().reverse();
   const first = await usageHistory(fixture.db, owner.userId);
+  expect(first.credit_units).toBe("10000");
   expect(first.requests.map((r) => r.id)).toEqual(expected.slice(0, 50));
   expect(first.requests[0]?.started_at).toBe(time);
   expect(first.requests[0]?.finished_at).toBe(time);
   expect(first.next_cursor).not.toBeNull();
   const cursor = JSON.parse(Buffer.from(first.next_cursor ?? "", "base64url").toString());
   const second = await usageHistory(fixture.db, owner.userId, cursor);
+  expect(second.credit_units).toBe("10000");
+  expect([...first.requests, ...second.requests].find((r) => r.id === ids[1])?.units).toBe("1");
   expect(second.requests.map((r) => r.id)).toEqual(expected.slice(50));
   expect(second.next_cursor).toBeNull();
-  expect(await usageHistory(fixture.db, other.userId)).toEqual({ requests: [], next_cursor: null });
+  expect(await usageHistory(fixture.db, other.userId)).toEqual({
+    credit_units: "10000",
+    requests: [],
+    next_cursor: null,
+  });
   const id = ids[0];
   if (!id) throw new Error("Missing fixture request");
   const receipt = await requestReceipt(fixture.db, owner.userId, id);
@@ -51,9 +58,16 @@ test("credit history paginates equal timestamps without duplication and scopes e
     model_id: "test-model",
     state: "settled",
     charged: "0",
+    credit_units: "10000",
     funding_source: "allowance",
     started_at: time,
     finished_at: time,
+  });
+  const smallest = ids[1];
+  if (!smallest) throw new Error("Missing sub-credit fixture request");
+  expect(await requestReceipt(fixture.db, owner.userId, smallest)).toMatchObject({
+    charged: "1",
+    credit_units: "10000",
   });
   expect(await requestReceipt(fixture.db, other.userId, id)).toBeNull();
   expect(await requestReceipt(fixture.db, owner.userId, crypto.randomUUID())).toBeNull();
@@ -74,7 +88,12 @@ test("credit HTTP routes preserve history and receipt shapes and reject invalid 
   );
   const history = await app.request("/v1/usage/requests");
   expect(history.status).toBe(200);
-  expect((await history.json()).requests).toHaveLength(50);
+  const historyBody = await history.json();
+  expect(historyBody.credit_units).toBe("10000");
+  expect(historyBody.requests).toHaveLength(50);
+  const usage = await app.request("/v1/usage");
+  expect(usage.status).toBe(200);
+  expect(await usage.json()).toMatchObject({ unit_scale: 1000000, credit_units: "10000" });
   const id = ids[0];
   if (!id) throw new Error("Missing fixture request");
   const response = await app.request(`/v1/usage/requests/${id}`);
@@ -82,6 +101,7 @@ test("credit HTTP routes preserve history and receipt shapes and reject invalid 
   expect(await response.json()).toMatchObject({
     id,
     charged: "0",
+    credit_units: "10000",
     policy_revision: policy.revision,
   });
   expect((await app.request("/v1/usage/requests?cursor=not-a-cursor")).status).toBe(400);

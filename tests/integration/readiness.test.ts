@@ -293,6 +293,19 @@ test("runtime role can dispatch and settle but cannot activate policy", async ()
     await reserveRequest(appDb, c.policy, c.model, r.id, c.userId, c.sessionId, 5n, 1);
     await markDispatched(appDb, r.id, c.userId, c.sessionId);
     await settleRequest(appDb, r.id, c.userId, { ...emptyUsage(), input: 2 }, 200, null);
+    const orderId = crypto.randomUUID();
+    await applyTopup(appDb, c.policy, {
+      id: orderId,
+      userId: c.userId,
+      productId: required(c.policy.topups[0]).productId,
+      policyRevision: c.policy.revision,
+      createdAt: new Date(),
+      paid: true,
+      refunded: false,
+    });
+    expect(
+      await appDb.sql`SELECT id FROM credit_grant WHERE user_id=${c.userId} AND grant_key=${`polar-order:${orderId}`}`,
+    ).toHaveLength(1);
     await expect(
       registerPolicy(appDb, { ...c.policy, revision: c.policy.revision + 1 }),
     ).rejects.toMatchObject({ code: "42501" });

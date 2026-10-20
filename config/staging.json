@@ -9,7 +9,7 @@
     {
       "id": "free",
       "rank": 0,
-      "allowanceUnits": "2000000",
+      "allowanceUnits": "2500000",
       "cycle": {
         "kind": "once"
       },
@@ -20,13 +20,24 @@
     {
       "id": "pro",
       "rank": 1,
-      "allowanceUnits": "10000000",
+      "allowanceUnits": "20000000",
       "cycle": {
         "kind": "calendar_month"
       },
       "maxConcurrent": 12,
       "requestsPerMinute": 120,
       "dailyLimitUnits": "3000000"
+    },
+    {
+      "id": "max",
+      "rank": 2,
+      "allowanceUnits": "100000000",
+      "cycle": {
+        "kind": "calendar_month"
+      },
+      "maxConcurrent": 12,
+      "requestsPerMinute": 120,
+      "dailyLimitUnits": "15000000"
     }
   ],
   "models": [
@@ -49,7 +60,8 @@
       ],
       "plans": [
         "free",
-        "pro"
+        "pro",
+        "max"
       ],
       "contextWindow": 922000,
       "maxOutput": 8192,
@@ -103,7 +115,8 @@
       ],
       "plans": [
         "free",
-        "pro"
+        "pro",
+        "max"
       ],
       "contextWindow": 16000,
       "maxOutput": 2000,
@@ -154,7 +167,8 @@
       ],
       "recommendedRoles": [],
       "plans": [
-        "pro"
+        "pro",
+        "max"
       ],
       "contextWindow": 16000,
       "maxOutput": 2000,
@@ -246,6 +260,14 @@
       "light": "gpt-6-luna",
       "decision": null,
       "transcribe": "gpt-4o-mini-transcribe"
+    },
+    "max": {
+      "lead": "gpt-6-luna",
+      "page": "gpt-6-luna",
+      "light": "gpt-6-luna",
+      "decision": null,
+      "transcribe": "gpt-4o-mini-transcribe"
     }
-  }
+  },
+  "creditCurrency": "USD"
 }

@@ -1,4 +1,5 @@
 import type { Database } from "../../platform/db";
+import { creditUnits } from "./denomination";
 
 interface HistoryRow {
   id: string;
@@ -39,6 +40,7 @@ export async function usageHistory(db: Database, userId: string, cursor?: UsageC
   const visible = rows.slice(0, 50);
   const last = visible.at(-1);
   return {
+    credit_units: creditUnits,
     requests: visible.map((row) => ({
       ...row,
       started_at: new Date(row.started_at).toISOString(),
@@ -61,6 +63,7 @@ export async function requestReceipt(db: Database, userId: string, id: string) {
   if (!row) return null;
   return {
     ...row,
+    credit_units: creditUnits,
     started_at: new Date(row.started_at).toISOString(),
     finished_at: row.finished_at ? new Date(row.finished_at).toISOString() : null,
   };

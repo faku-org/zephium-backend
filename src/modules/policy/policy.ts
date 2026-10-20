@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Database } from "../../platform/db";
 import { AppError } from "../../platform/errors";
 
-// Integer millionths of a display credit. No floating-point balance arithmetic.
+// Whole accounting units. Public credit_units defines the display scale; never round ledger charges.
 export const units = z.string().regex(/^(0|[1-9][0-9]{0,14})$/);
 export const providerNames = [
   "openai",
@@ -321,6 +321,14 @@ export async function registerPolicy(db: Database, p: CloudPolicy) {
         AND amount>spent AND (expires_at IS NULL OR expires_at>clock_timestamp())) AS outstanding`;
       if (balance?.outstanding)
         throw new Error("Review existing purchased balances before assigning a credit currency");
+      const [pending] = await tx`SELECT
+        EXISTS(SELECT 1 FROM billing_customer WHERE checkout_until>clock_timestamp() OR (requested>processed AND (provider_touched OR polar_id IS NOT NULL)))
+        OR EXISTS(SELECT 1 FROM billing_checkout WHERE kind='topup' AND expires_at>clock_timestamp())
+        OR EXISTS(SELECT 1 FROM billing_order_job WHERE requested>processed) AS unresolved`;
+      if (pending?.unresolved)
+        throw new Error(
+          "Reconcile legacy purchases and wait for checkout safety windows before assigning a credit currency",
+        );
     }
     const [existing] = await tx`SELECT digest FROM cloud_policy WHERE revision=${p.revision}`;
     if (existing && existing.digest !== digest)
