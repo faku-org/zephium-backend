@@ -51,13 +51,26 @@ export async function acceptEvent(
       ON CONFLICT(order_id) DO UPDATE SET requested=billing_order_job.requested+1,next_attempt=now(),attempts=0`;
   });
 }
-export async function accountAccess(db: Database, id: string) {
+export async function accountAccess(
+  db: Database,
+  id: string,
+  products: readonly { productId: string; plan: string; interval: "monthly" | "yearly" }[] = [],
+) {
   const [row] =
-    await db.sql`SELECT provider_touched,status,paid_until,cancel_at_period_end,reconciled_at FROM billing_customer WHERE user_id=${id}`;
+    await db.sql`SELECT provider_touched,status,paid_until,cancel_at_period_end,reconciled_at,product_id FROM billing_customer WHERE user_id=${id}`;
   const fresh =
     row?.reconciled_at && new Date(row.reconciled_at).getTime() > Date.now() - 24 * 60 * 60 * 1000;
+  const paid = !!(
+    fresh &&
+    row?.status === "active" &&
+    row.paid_until &&
+    new Date(row.paid_until) > new Date()
+  );
+  const product = paid ? products.find((item) => item.productId === row?.product_id) : undefined;
   return {
     subscription: {
+      plan: product?.plan ?? null,
+      interval: product?.interval ?? null,
       status:
         row?.provider_touched === false
           ? "inactive"
@@ -67,12 +80,7 @@ export async function accountAccess(db: Database, id: string) {
       paidUntil: row?.paid_until ? new Date(row.paid_until).toISOString() : null,
       cancelAtPeriodEnd: row?.cancel_at_period_end ?? false,
     },
-    paid: !!(
-      fresh &&
-      row?.status === "active" &&
-      row.paid_until &&
-      new Date(row.paid_until) > new Date()
-    ),
+    paid,
     capabilities: { hostedAI: false, synchronization: false },
   };
 }

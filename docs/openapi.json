@@ -1808,12 +1808,29 @@
           },
           "cancelAtPeriodEnd": {
             "type": "boolean"
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Policy plan for the current applicable paid subscription; null when absent, stale, expired, unrecognized or billing is disabled."
+          },
+          "interval": {
+            "enum": [
+              "monthly",
+              "yearly",
+              null
+            ],
+            "description": "Billing cadence of the current applicable subscription, not the allowance-reset cadence."
           }
         },
         "required": [
           "status",
           "paidUntil",
-          "cancelAtPeriodEnd"
+          "cancelAtPeriodEnd",
+          "plan",
+          "interval"
         ],
         "additionalProperties": false
       },

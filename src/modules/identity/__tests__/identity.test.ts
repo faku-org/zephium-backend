@@ -287,7 +287,9 @@ test("staging allowlist blocks OTP and redemption for unapproved new and existin
     [existing, existingCode],
     [denied, deniedCode],
   ] as const) {
-    expect((await request("/sign-in/email-otp", { email, otp }, restricted)).status).toBe(401);
+    const redemption = await request("/sign-in/email-otp", { email, otp }, restricted);
+    expect(redemption.status).toBe(401);
+    expect(await redemption.json()).toMatchObject({ error: { code: "invalid_code" } });
     expect((await fixture.db.sql`SELECT id FROM auth_user WHERE email=${email}`).length).toBe(
       email === existing ? 1 : 0,
     );

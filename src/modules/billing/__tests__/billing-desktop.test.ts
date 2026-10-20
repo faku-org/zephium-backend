@@ -832,3 +832,74 @@ test("legacy arbitrary-credit top-ups remain purchasable without declaring dolla
     await isolated.close();
   }
 });
+
+test("subscription plan and interval use the current paid product and stay null when not applicable", async () => {
+  const isolated = await testDatabase();
+  try {
+    const base = testPolicy();
+    const free = base.plans[0];
+    if (!free) throw new Error("Missing free plan");
+    const monthly = "00000000-0000-4000-8000-000000000201";
+    const yearly = "00000000-0000-4000-8000-000000000202";
+    const policy = testPolicy({
+      plans: [...base.plans, { ...free, id: "pro", rank: 1 }, { ...free, id: "max", rank: 2 }],
+      subscriptions: [
+        { productId: monthly, plan: "pro", interval: "monthly" },
+        { productId: yearly, plan: "max", interval: "yearly" },
+      ],
+    });
+    const owner = await createCloudAccount(isolated.db);
+    const service = createBillingService(
+      { ...isolated.config, BILLING_ENABLED: "true" },
+      isolated.db,
+      provider(),
+      policy,
+    );
+    expect((await service.summary(owner.userId)).subscription).toMatchObject({
+      plan: null,
+      interval: null,
+    });
+    await isolated.db
+      .sql`UPDATE billing_customer SET provider_touched=true,status='active',reconciled_at=now(),paid_until=now()+interval '1 month',product_id=${monthly},cancel_at_period_end=true WHERE user_id=${owner.userId}`;
+    expect(await service.summary(owner.userId)).toMatchObject({
+      paid: true,
+      subscription: { plan: "pro", interval: "monthly", cancelAtPeriodEnd: true },
+    });
+    await isolated.db
+      .sql`UPDATE billing_customer SET product_id=${yearly} WHERE user_id=${owner.userId}`;
+    expect((await service.get(owner.userId)).subscription).toMatchObject({
+      plan: "max",
+      interval: "yearly",
+    });
+    const disabled = createBillingService(
+      { ...isolated.config, BILLING_ENABLED: "false" },
+      isolated.db,
+      provider(),
+      policy,
+    );
+    expect(await disabled.summary(owner.userId)).toMatchObject({
+      paid: false,
+      subscription: { status: "not_applicable", plan: null, interval: null },
+    });
+    await isolated.db
+      .sql`UPDATE billing_customer SET product_id='unknown-product' WHERE user_id=${owner.userId}`;
+    expect((await service.summary(owner.userId)).subscription).toMatchObject({
+      plan: null,
+      interval: null,
+    });
+    await isolated.db
+      .sql`UPDATE billing_customer SET product_id=${monthly},paid_until=now()-interval '1 second' WHERE user_id=${owner.userId}`;
+    expect(await service.summary(owner.userId)).toMatchObject({
+      paid: false,
+      subscription: { plan: null, interval: null },
+    });
+    await isolated.db
+      .sql`UPDATE billing_customer SET paid_until=now()+interval '1 month',reconciled_at=now()-interval '2 days' WHERE user_id=${owner.userId}`;
+    expect(await service.summary(owner.userId)).toMatchObject({
+      paid: false,
+      subscription: { status: "unknown", plan: null, interval: null },
+    });
+  } finally {
+    await isolated.close();
+  }
+});

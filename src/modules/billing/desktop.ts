@@ -122,11 +122,16 @@ export function createBillingService(
   }
 
   async function summary(userId: string) {
-    const access = await accountAccess(db, userId);
+    const access = await accountAccess(db, userId, policy?.subscriptions);
     if (!enabled)
       return {
         ...access,
-        subscription: { ...access.subscription, status: "not_applicable" },
+        subscription: {
+          ...access.subscription,
+          status: "not_applicable",
+          plan: null,
+          interval: null,
+        },
         paid: false,
         capabilities: { ...access.capabilities, hostedAI: !!policy?.enabled },
       };

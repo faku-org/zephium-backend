@@ -672,8 +672,14 @@ test("customer margin tariffs debit exact sub-credit units independently of prov
       "/v1/chat/completions",
     );
     const costRates = required(model.costRates);
-    const customerHold = holdCost(1, 1, 0, model.rates);
-    const providerHold = holdCost(1, 1, 0, costRates);
+    const customerHold = holdCost(20, 5, 0, model.rates);
+    const providerHold = holdCost(20, 5, 0, costRates);
+    expect(customerHold).toBe(110n);
+    expect(providerHold).toBe(95n);
+    expect(await usageSummary(isolated.db, policy, owner.userId)).toMatchObject({
+      credits_remaining: "120",
+      reserved_units: "0",
+    });
     await reserveRequest(
       isolated.db,
       policy,
@@ -682,38 +688,102 @@ test("customer margin tariffs debit exact sub-credit units independently of prov
       owner.userId,
       owner.sessionId,
       customerHold,
-      1,
+      20,
       providerHold,
     );
+
+    async function accounting() {
+      const [receipt] = await isolated.db
+        .sql`SELECT state,policy_revision,reserved::text,charged::text,
+        actual_cost::text,price_snapshot,cost_rates,usage FROM cloud_request WHERE id=${request.id}`;
+      const [budget] = await isolated.db.sql`SELECT reserved::text,exposure::text,terminal
+        FROM cloud_cost_record WHERE request_id=${request.id}`;
+      const [grants] = await isolated.db
+        .sql`SELECT sum(spent)::text AS spent,sum(held)::text AS held
+        FROM credit_grant WHERE user_id=${owner.userId}`;
+      const [allocations] = await isolated.db.sql`SELECT count(*)::integer AS count,
+        coalesce(sum(amount),0)::text AS amount FROM credit_allocation WHERE request_id=${request.id}`;
+      const [bucket] = await isolated.db.sql`SELECT amount::text FROM cloud_spend_bucket
+        WHERE key='customer-margin-test:total'`;
+      return { receipt, budget, grants, allocations, bucket };
+    }
+    const reserved = await accounting();
+    expect(reserved.receipt).toMatchObject({
+      state: "reserved",
+      reserved: "110",
+      charged: "0",
+      actual_cost: null,
+      policy_revision: policy.revision,
+      price_snapshot: model.rates,
+      cost_rates: costRates,
+    });
+    expect(reserved.budget).toEqual({ reserved: "95", exposure: "95", terminal: false });
+    expect(reserved.grants).toEqual({ spent: "0", held: "110" });
+    expect(reserved.allocations?.amount).toBe("110");
+    expect(reserved.allocations?.count).toBeGreaterThan(0);
+    expect(reserved.bucket?.amount).toBe("95");
+    expect(await usageSummary(isolated.db, policy, owner.userId)).toMatchObject({
+      credits_remaining: "10",
+      reserved_units: "110",
+    });
     await markDispatched(isolated.db, request.id, owner.userId, owner.sessionId);
+
+    // Change future tariffs after dispatch; settlement must use both stored snapshots.
+    const updated = {
+      ...policy,
+      revision: policy.revision + 1,
+      models: [
+        {
+          ...model,
+          rates: { ...model.rates, input: "30000000", output: "60000000" },
+          costRates: { ...costRates, input: "10000000", output: "30000000" },
+        },
+      ],
+    };
+    await registerPolicy(isolated.db, updated);
     const usage = { ...emptyUsage(), input: 1, output: 1 };
     expect(charge(usage, model.rates)).toBe(9n);
     expect(charge(usage, costRates)).toBe(4n);
+    expect(charge(usage, required(updated.models[0]).rates)).toBe(90n);
+    expect(charge(usage, required(required(updated.models[0]).costRates))).toBe(40n);
     await settleRequest(isolated.db, request.id, owner.userId, usage, 200, null);
-    expect(
-      (
-        await isolated.db
-          .sql`SELECT state,charged::text,actual_cost::text FROM cloud_request WHERE id=${request.id}`
-      )[0],
-    ).toMatchObject({ state: "settled", charged: "9", actual_cost: "9" });
-    expect(
-      (
-        await isolated.db
-          .sql`SELECT exposure::text,terminal FROM cloud_cost_record WHERE request_id=${request.id}`
-      )[0],
-    ).toMatchObject({ exposure: "4", terminal: true });
-    const summary = await usageSummary(isolated.db, policy, owner.userId);
+
+    const settled = await accounting();
+    expect(settled.receipt).toMatchObject({
+      state: "settled",
+      reserved: "110",
+      charged: "9",
+      actual_cost: "9",
+      usage,
+      policy_revision: policy.revision,
+      price_snapshot: model.rates,
+      cost_rates: costRates,
+    });
+    expect(settled.receipt?.price_snapshot).toEqual(model.rates);
+    expect(settled.receipt?.cost_rates).toEqual(costRates);
+    expect(settled.budget).toEqual({ reserved: "95", exposure: "4", terminal: true });
+    expect(settled.grants).toEqual({ spent: "9", held: "0" });
+    expect(settled.allocations).toEqual({ count: 0, amount: "0" });
+    expect(settled.bucket?.amount).toBe("4");
+    const summary = await usageSummary(isolated.db, updated, owner.userId);
     expect(summary).toMatchObject({
       unit_scale: 1000000,
       credit_units: "10000",
       credits_remaining: "111",
+      reserved_units: "0",
     });
-    expect(
-      (
-        await isolated.db
-          .sql`SELECT sum(spent)::text AS spent FROM credit_grant WHERE user_id=${owner.userId}`
-      )[0]?.spent,
-    ).toBe("9");
+
+    // Even a later duplicate with different usage cannot debit or reprice settled work.
+    await settleRequest(
+      isolated.db,
+      request.id,
+      owner.userId,
+      { ...emptyUsage(), input: 20, output: 5 },
+      200,
+      "synthetic-duplicate",
+    );
+    expect(await accounting()).toEqual(settled);
+    expect(await usageSummary(isolated.db, updated, owner.userId)).toEqual(summary);
   } finally {
     await isolated.close();
   }
