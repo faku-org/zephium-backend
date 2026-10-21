@@ -74,9 +74,9 @@ The repository implementation and local payment-recovery tests do not establish 
 
 Use `GET /v1/usage.purchased_balance` for a monetary display: `{currency:"USD",amount:"11.345677"}` or null. The amount is an exact decimal string for available usage credit, excluding holds and expired/revoked credit. Show plan allowance as a percentage independently. Do not label `purchased_remaining / unit_scale` as USD when the display field is absent/null; older deployments and policies without a currency designation do not make that promise. This is usage credit, not a refundable cash balance. Currency designation must be explicitly activated in the environment's reviewed policy; adding the field to the repository does not change existing staging credit semantics.
 
-## Staging handoff — 2026-10-19
+## Staging handoff — 2026-10-21
 
-Use `https://staging-api.zephium.app`. Application source `781b7f3` and policy revision **3** are live, with Cloud AI and Polar sandbox billing enabled. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-19).
+Use `https://staging-api.zephium.app`. Application source `b829b6080a43ff555aa7b06470fc9d0e99897475` and policy revision **4** are live, with Cloud AI and Polar sandbox billing enabled. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-21).
 
 | Catalog ID | Roles | Access | Default |
 | --- | --- | --- | --- |
@@ -86,7 +86,7 @@ Use `https://staging-api.zephium.app`. Application source `781b7f3` and policy r
 
 Read the catalog and its per-model limits instead of hard-coding this table. There is no hosted decision-model default or Max-exclusive frontier row in this staging policy. No Anthropic beta headers are forwarded; this milestone did not live-qualify the other providers.
 
-Staging fixtures: Free has a one-time 2,000,000-unit allowance and no renewal or welcome bonus; Pro has 10,000,000 units per month; Max has 50,000,000 per month. Polar offers are Pro USD20/month, Max USD100/month, and `staging-topup` USD1 for 2,000,000 test units expiring after 365 days. These credit amounts are test fixtures, not final commercial allowances. Spend the earliest-expiring eligible grant first. `purchased_balance` remains **null**: do not invent a dollar balance from `unit_scale` or `purchased_remaining` before the owner approves currency denomination. There is no metered overage.
+Staging fixtures: Free has a one-time 250-credit allowance (2,500,000 units) and no renewal or welcome bonus; Pro has 2,000 credits per month (20,000,000 units); Max has 10,000 per month (100,000,000 units). Polar offers are Pro USD20/month, Max USD100/month, and `staging-topup` USD1 for 100 credits (1,000,000 units), expiring after 365 days. Allowance sizes and model tariffs remain provisional fixtures. Existing grants keep their original amounts; this deployment does not refill or resize them. Spend the earliest-expiring eligible grant first. `purchased_balance` now reports an exact USD usage-credit amount under the activated policy. There is no metered overage.
 
 Keep these client behaviors in the final UI pass:
 
@@ -96,7 +96,7 @@ Keep these client behaviors in the final UI pass:
 - Handle 401 `reauthentication_required` with fresh sign-in for sensitive mutations. Preserve separate API-origin vault entries. Email change and deletion revoke old sessions.
 - Handle 403 `billing_review_required` on usage, new checkout and upgrades with a support/review state, not another purchase retry. Account export, portal management and downgrades remain usable. The owner has a deliberately reviewed test account for this case.
 - Display one-time allowance percentages without a reset date when `allowance.renews:false` and `period_end:null`. A reused email may legitimately have zero signup allowance. Top-ups never unlock a higher model tier.
-- Verify native text/voice receipts, request IDs, SSE trailers, idempotency handling, plan-required/insufficient-credit/daily-limit responses, and Retry-After using the existing API shapes. This update adds no new endpoint or response shape; it corrects export/contact behavior and extends the existing review error to purchasing boundaries.
+- Verify native text/voice receipts, request IDs, SSE trailers, idempotency handling, plan-required/insufficient-credit/daily-limit responses, and Retry-After using the existing API shapes. The additive credit display and subscription metadata fields are described below; provider-native response bodies are unchanged.
 
 Staging spending ceilings remain USD50 total, USD10 per UTC day and USD5 daily free subsidy. Effective signup protection is three new accounts per IP/day with disposable-email blocking; the allowlist remains enabled. Do not run deliberate spend-exhaustion or capacity campaigns.
 
@@ -104,9 +104,9 @@ Staging spending ceilings remain USD50 total, USD10 per UTC day and USD5 daily f
 
 The approved conversion is 10,000 accounting units per credit, with 100 credits per USD1 of usage-credit face value under a USD-denominated policy. The additive `credit_units:"10000"` field is provided on usage, model price, billing offers, usage-history envelope, individual receipt and settled SSE trailer. Native provider responses and currency `amount_minor` fields are unchanged. Do not round individual charges to a whole credit.
 
-Provisional next-policy fixtures are Free250 credits once (2,500,000 units), Pro2,000/month (20,000,000), Max10,000/month (100,000,000), and USD1 top-up100 credits (1,000,000). Existing grants retain their original amounts; there is no automatic trial refill. Retail model tariffs can include margin independently of provider cost safeguards. Final allowance sizes and margin await the measured cost review.
+Provisional policy-4 fixtures are Free250 credits once (2,500,000 units), Pro2,000/month (20,000,000), Max10,000/month (100,000,000), and USD1 top-up100 credits (1,000,000). Existing grants retain their original amounts; there is no automatic trial refill. Retail model tariffs can include margin independently of provider cost safeguards. Final allowance sizes and margin await the measured cost review.
 
-This section describes the repository change and the prepared next policy, not a live deployment. The October19 staging snapshot above remains historical. Currency activation must wait for legacy checkout windows and reconciliation; `purchased_balance` stays null on the current undeclared-currency policy. Do not treat an old USD1/2,000,000-unit test offer as the new retail conversion.
+Policy 4 was explicitly registered and deployed on October 21 after the legacy checkout windows expired and fresh reconciliation confirmed no outstanding purchased balance or pending billing work. The old USD1/2,000,000-unit offer is retired. Its historical grant and request snapshots remain unchanged; do not reinterpret an old receipt using the new offer.
 
 For cost reconciliation, account usage includes all hosted calls charged to that account, regardless of lead/page/light role. The ledger has no Work-run or role labels. Supply only request IDs and a UTC range for a role-specific comparison; never send prompts, page content or outputs. Customer charges, provider-cost estimates and actual provider invoices are distinct. Reasoning tokens are already included in output and must not be charged twice.
 

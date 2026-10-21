@@ -37,9 +37,23 @@ The GitHub **Check** workflow runs static checks, tests, policy validation and b
 
 Use [staging setup](staging.md) for owner configuration and [operations](operations.md) for recovery. Record actual Resend delivery, Polar sandbox payment/refund behavior, native model metering, public TLS/SSE, independent encrypted restore and desktop flows. Green repository checks do not establish those results or a supported user capacity.
 
+## Recorded evidence — 2026-10-21
+
+This is the current staging deployment record; the October 19 and October 18 sections below are historical. Application revision `b829b6080a43ff555aa7b06470fc9d0e99897475` and policy revision **4** are live. Production remains unactivated.
+
+- Repository verification passed **296 tests / 1,704 assertions**, module boundaries, TypeScript and Biome. Both [Check](https://github.com/zephium-browser/backend/actions/runs/39352737502) and the [immutable image build](https://github.com/zephium-browser/backend/actions/runs/39352749571) passed for that exact source revision.
+- Fresh global reconciliation confirmed zero outstanding purchased balances/holds, future checkout safety windows, pending billing/order jobs, active cloud requests and undelivered usage outbox records. Known legacy provider checkouts were no longer open; both refund-test orders remained refunded. No timestamps or balances were changed to bypass the migration gate.
+- The pending deletion test completed naturally: account, billing, deletion and session rows were absent, and the external Polar customer was absent. This closes the October 19 final-purge gate.
+- Policy 4 registered successfully at **2026-10-21 10:52:23 UTC**. After the API/worker rollout, both runtime policy files and the active database policy matched digest `4e88c7b40dd46fa5efd2b385ae419ea38c38ad4bddec2a1c5d224f4b62c61cc4`. Exact application images, healthy API/worker state and unchanged PostgreSQL image were verified.
+- Independent public HTTPS checks returned readiness 200, the exact new source revision, expected cloud/billing/allowlisted-signup flags, and client-config conditional 304 with an empty body. Staging provider budgets remain USD50 total, USD10 per UTC day and USD5 daily free subsidy.
+- The running application's billing, read-only usage and catalog projections returned `credit_units:"10000"`, the USD1/1,000,000-unit top-up, expected Pro/Max prices and an exact USD purchased balance. Existing grant count, amount, spent and held values were unchanged. This was a domain-level read using deployed code and provider products, not a new authenticated HTTP or checkout test. API/worker/migrator OCI revisions, migrator exit 0, restricted runtime settings and private network membership also passed.
+- The new credit denomination and provisional allowances are documented in the [current desktop handoff](desktop-integration.md#staging-handoff--2026-10-21). Existing grants and historical request tariffs were preserved. Settlement regressions prove actual customer-tariff charging, separate provider-cost accounting, unused-hold release and duplicate-settlement safety.
+
+The final desktop credits/billing UI pass remains separate from these server checks. Actual monthly renewal is still future behavior with integration-test coverage. Production still needs final commercial configuration and its own deployment, operational backup/WAL restore, alerts and monitoring; this staging rollout does not qualify production.
+
 ## Recorded evidence — 2026-10-19
 
-This newer record supersedes the deployment-status statements in the October 18 history below. Staging serves application revision `781b7f3db9898e6c58b9e4777164cbe9bb76a75d`, migration 0009 and policy revision 3. Production has not been activated.
+This historical record superseded the October 18 deployment statements. At the time, staging served application revision `781b7f3db9898e6c58b9e4777164cbe9bb76a75d`, migration 0009 and policy revision 3. Production has not been activated.
 
 ### Repository and deployment
 
