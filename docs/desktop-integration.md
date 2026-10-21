@@ -117,3 +117,7 @@ Billing and refresh now include nullable `subscription.plan` and `subscription.i
 Invite-only OTP sending remains generic202. Uninvited redemption returns **401 `invalid_code`**, uniformly for existing and nonexistent addresses; it does not use `signup_closed`/`signup_disabled`. Display the invite-only notice from `client-config.signup_mode:"allowlist"` and retain a generic verification failure. Existing allowed users may sign in even when new signup is closed.
 
 Settlement uses provider-reported actual usage with the request's snapshotted customer tariff, capped by the authorized reservation, and releases unused holds. Provider-cost accounting uses its separate rate snapshot. A regression reserves110 customer units and95 provider-budget units, then settles actual usage to9 customer units and4 provider-cost units, with zero remaining holds/allocations. Later policy changes and duplicate settlement cannot reprice or recharge that request. The historical equality between customer debit and conservative provider estimate came from identical configured tariffs, not from retaining the reservation. These staged tariffs remain fixtures until final retail pricing is approved.
+
+## Proposed account avatars
+
+The [avatar contract](avatar-contract.md) defines the proposed upload/delete/private image endpoints, limits, error codes, export and client caching behavior. It is not implemented or deployed yet. The desktop picker can use that proposal for coordination; existing account responses do not yet expose `avatar_url`.
