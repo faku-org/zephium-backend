@@ -113,6 +113,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:?Set your own Resend key}
       EMAIL_FROM: ${EMAIL_FROM:?Set your verified sender}
       SOURCE_URL: ${SOURCE_URL:?Set the public source URL for this release or fork}
+      CLIENT_MIN_VERSION: ${CLIENT_MIN_VERSION:?Set the oldest supported desktop version}
       SIGNUP_OPEN: ${SIGNUP_OPEN:-false}
       SIGNUP_EMAIL_ALLOWLIST: ${SIGNUP_EMAIL_ALLOWLIST:-}
       SIGNUP_PER_IP_PER_DAY: ${SIGNUP_PER_IP_PER_DAY:-3}

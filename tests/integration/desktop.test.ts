@@ -413,7 +413,7 @@ test("subscription HTTP routes reject unauthenticated, malformed and unknown quo
 test("public client config is unauthenticated, cacheable, and independent of database availability", async () => {
   const config = {
     ...fixture.config,
-    CLIENT_MIN_VERSION: "2.3.4",
+    CLIENT_MIN_VERSION: "1.0.0-beta.2",
     CLIENT_NOTICE_ID: "desktop-notice",
     CLIENT_NOTICE_TEXT: "Service notice",
     CLOUD_OPENAI_KEY: "private-test-key",
@@ -442,7 +442,7 @@ test("public client config is unauthenticated, cacheable, and independent of dat
   expect(raw).not.toContain(fixture.config.DATABASE_URL);
   expect(JSON.parse(raw)).toMatchObject({
     schema_version: 1,
-    min_client_version: "2.3.4",
+    min_client_version: "1.0.0-beta.2",
     signup_open: true,
     billing_enabled: false,
     notice: { id: "desktop-notice", text: "Service notice" },

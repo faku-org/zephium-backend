@@ -55,6 +55,8 @@ Fill the [environment inventory](../deploy/staging.env.example) in Coolify:
 
 Coolify labels normal deployment values **Production** even within a staging resource. Keep preview deployments disabled; Compose-referenced preview variables may be undeletable and do not need removal. Keep generated environment files root-readable only, and inspect selected metadata rather than printing the populated Compose configuration.
 
+Set `CLIENT_MIN_VERSION=1.0.0-beta.2` for the current desktop beta. The API service must explicitly receive this variable through Compose; an unused Coolify environment value does not override the application default. A stable `1.0.0` minimum excludes `1.0.0-beta.2` under semantic versioning. Production must explicitly select its oldest supported build.
+
 Use `SIGNUP_OPEN=false` initially and set `SIGNUP_EMAIL_ALLOWLIST` to exact comma-separated tester addresses. Later, setting signup open allows those approved testers to enroll. API and worker get application database credentials; only migration and policy jobs get migrator credentials. Never use the local-development database password here.
 
 Create the Coolify-managed File `./zephium-staging-policy.json` mounted at `/app/config/staging.json`, using the reviewed staging policy JSON and set `enabled:false` before the first activation. The checked-in staging template is enabled for testing and is not a production policy. Review allowances, model access, prices, budgets and sandbox product mappings before enabling it; increase its revision for each change. Hosted mode must not select `selfHostedPlan`.
