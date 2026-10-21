@@ -62,7 +62,7 @@ The modular refactor preserves HTTP paths and response shapes. Account mutations
 
 ## Pro / Max subscription changes — additional desktop work
 
-The initial checkout contract is unchanged. Always send the selected `plan` once more than one plan has the same interval. For an existing paid subscription, use the preview/confirm/receipt endpoints in [api.md](api.md#subscription-plan-changes); `409 subscription_change_required` must not trigger another checkout. Show the recurring price, tax-exclusive immediate-charge **estimate**, and whether the change is immediate or at renewal before asking the user to confirm.
+The initial checkout contract is unchanged. Always send the selected `plan` once more than one plan has the same interval. For an existing paid subscription, use the preview/confirm/receipt endpoints in [api.md](api.md#subscription-plan-changes); `409 subscription_change_required` must not trigger another checkout. Show the recurring price, immediate-charge **estimate**, and whether the change is immediate or at renewal before asking the user to confirm.
 
 An account under billing review receives 403 `billing_review_required` for new checkouts and upgrades as well as hosted usage. Show a support/review action instead of another purchase attempt. Downgrades, portal cancellation, export and existing operation receipts remain available; an upgrade queued before review may finish as `failed` with that error before dispatch. Already-dispatched changes still reconcile.
 
@@ -92,7 +92,7 @@ Keep these client behaviors in the final UI pass:
 
 - Preserve the received checkout link for retrying the same checkout. Duplicate subscription creation can return `checkout_in_progress`; an existing subscription returns `subscription_change_required`. Use the preview/confirm/receipt flow for changes.
 - After returning from checkout/portal, refresh billing at no more than six calls per minute. A return page or HTTP202 operation receipt alone does not establish a successful purchase/change.
-- Display upgrade charges as tax-exclusive estimates. Retain the quote/operation ID; repeated confirmation resumes that operation. A scheduled receipt records the request outcome; refresh current billing/usage and respect later cancellation or provider changes.
+- Display upgrade charges as estimates, without calculating or adding tax locally. Retain the quote/operation ID; repeated confirmation resumes that operation. A scheduled receipt records the request outcome; refresh current billing/usage and respect later cancellation or provider changes.
 - Handle 401 `reauthentication_required` with fresh sign-in for sensitive mutations. Preserve separate API-origin vault entries. Email change and deletion revoke old sessions.
 - Handle 403 `billing_review_required` on usage, new checkout and upgrades with a support/review state, not another purchase retry. Account export, portal management and downgrades remain usable. The owner has a deliberately reviewed test account for this case.
 - Display one-time allowance percentages without a reset date when `allowance.renews:false` and `period_end:null`. A reused email may legitimately have zero signup allowance. Top-ups never unlock a higher model tier.
@@ -121,3 +121,9 @@ Settlement uses provider-reported actual usage with the request's snapshotted cu
 ## Proposed account avatars
 
 The [avatar contract](avatar-contract.md) defines the proposed upload/delete/private image endpoints, limits, error codes, export and client caching behavior. It is not implemented or deployed yet. The desktop picker can use that proposal for coordination; existing account responses do not yet expose `avatar_url`.
+
+## Checkout tax clarification — 2026-10-21
+
+The checked Polish Pro sandbox checkout and paid order had a USD20 total: USD16.26 net plus USD3.74 included tax, with no discount or proration. The product lists USD20 and inherits tax behavior; the effective checkout reported `inclusive`. This result does not establish every country's treatment or a production tax configuration. Display the product offer as its listed price, and let Polar present the final tax breakdown and total. Never add a tax line already included in the total.
+
+Known contract limitation: upgrade previews currently hard-code `amount_due_estimate.tax_excluded:true`, even though the estimate is based on product amounts and no customer-specific tax calculation is performed. That flag cannot establish that an inclusive product's estimate excludes tax. Until the tax-aware quote contract is corrected, show a generic estimate with final tax/amount determined by Polar; do not label it definitively tax-exclusive or add estimated tax. Correct this metadata before production. The checkout and payment amount itself is calculated by Polar, not this preview flag.
