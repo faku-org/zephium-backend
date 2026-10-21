@@ -187,6 +187,7 @@ try {
   productionValues.set("BILLING_RETURN_URL", "https://example.test/billing/return");
   productionValues.set("BILLING_SUCCESS_URL", "https://example.test/billing/return");
   productionValues.set("SIGNUP_EMAIL_ALLOWLIST", "");
+  productionValues.set("CLIENT_MIN_VERSION", "1.0.0-beta.2");
   await writeFile(
     productionEnvFile,
     `${[...productionValues].map(([key, value]) => `${key}=${value}`).join("\n")}\n`,
@@ -213,6 +214,7 @@ try {
     rendered.services.api.environment.POLAR_ENVIRONMENT !== "production" ||
     rendered.services.api.environment.SIGNUP_EMAIL_ALLOWLIST !== "" ||
     rendered.services.api.environment.SIGNUP_OPEN !== "false" ||
+    rendered.services.api.environment.CLIENT_MIN_VERSION !== "1.0.0-beta.2" ||
     rendered.services.postgres.command.includes("archive_mode=off") ||
     !rendered.services.postgres.volumes.some(
       (v: { target: string; read_only: boolean }) =>
