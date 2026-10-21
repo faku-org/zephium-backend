@@ -1,6 +1,6 @@
 # Account avatar contract
 
-Status: implemented in the repository on 2026-10-21; staging deployment and live qualification are tracked separately in the desktop handoff.
+Status: implemented and deployed to staging on 2026-10-21 in application revision `36140fb`. Authenticated public HTTPS qualification passed; see the desktop handoff and testing record. Desktop picker integration remains a separate client check.
 
 ## Ownership and access
 

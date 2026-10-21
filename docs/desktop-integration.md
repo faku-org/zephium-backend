@@ -76,7 +76,7 @@ Use `GET /v1/usage.purchased_balance` for a monetary display: `{currency:"USD",a
 
 ## Staging handoff — 2026-10-21
 
-Use `https://staging-api.zephium.app`. Application source `c3c0641dd36657d133a17324e39cf2134bc82436` and policy revision **5** are live, with Cloud AI and Polar sandbox billing enabled. The minimum client version is `1.0.0-beta.2`. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-21).
+Use `https://staging-api.zephium.app`. Application source `36140fb084082c874686a495627271f32b8b5060` and policy revision **5** are live, with Cloud AI and Polar sandbox billing enabled. The minimum client version is `1.0.0-beta.2`. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-21).
 
 | Catalog ID | Roles | Access | Default |
 | --- | --- | --- | --- |
@@ -130,7 +130,7 @@ Settlement uses provider-reported actual usage with the request's snapshotted cu
 
 ## Account avatars
 
-The [avatar contract](avatar-contract.md) defines the implemented upload/delete/private image endpoints, limits, error codes, export and client caching behavior. Repository implementation is complete; staging activation is reported separately. `GET /v1/account` adds nullable `avatar_url`; export embeds the processed image. Rust must fetch the protected versioned URL using its bearer and provide only image bytes to the UI. Cancel a pending upload before removal, revalidate private cached bytes and clear local avatar caches on sign-out.
+The [avatar contract](avatar-contract.md) defines the implemented upload/delete/private image endpoints, limits, error codes, export and client caching behavior. Live on staging in application revision `36140fb`, with policy 5 unchanged. Authenticated HTTPS checks passed for upload/re-encoding, private fetch and conditional 304, export, replacement and deletion; anonymous access returned 401. The test image was removed and the temporary session revoked. `GET /v1/account` adds nullable `avatar_url`; export embeds the processed image. Rust must fetch the protected versioned URL using its bearer and provide only image bytes to the UI. Cancel a pending upload before removal, revalidate private cached bytes and clear local avatar caches on sign-out.
 
 ## Checkout tax clarification — 2026-10-21
 
