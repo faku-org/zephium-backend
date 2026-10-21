@@ -154,3 +154,55 @@ test("checkout survives the combined bounded state-read and create deadlines", a
     await server.stop(true);
   }
 }, 30_000);
+
+test("avatar PUT permits its bounded multipart size without raising other account body limits", async () => {
+  const server = createApiServer(
+    () => ({
+      async fetch(request) {
+        return Response.json({ bytes: (await request.arrayBuffer()).byteLength });
+      },
+    }),
+    await freePort(),
+    loopback,
+  );
+  const send = (
+    path: string,
+    method: string,
+    size: number,
+  ): Promise<{ status: number | undefined; body: { bytes?: number; error?: { code: string } } }> =>
+    new Promise((resolve, reject) => {
+      const req = httpRequest(
+        `http://${loopback}:${server.port}${path}`,
+        {
+          method,
+          headers: { "content-type": "application/octet-stream", "transfer-encoding": "chunked" },
+        },
+        (response) => {
+          let text = "";
+          response.on("data", (chunk) => {
+            text += chunk.toString();
+          });
+          response.once("end", () =>
+            resolve({ status: response.statusCode, body: JSON.parse(text) }),
+          );
+          response.once("error", reject);
+        },
+      );
+      req.once("error", reject);
+      req.write(Buffer.alloc(1024));
+      req.end(Buffer.alloc(size - 1024));
+    });
+  try {
+    const maximum = 2 * 1024 * 1024 + 16 * 1024;
+    const accepted = await send("/v1/account/avatar", "PUT", maximum);
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.bytes).toBe(maximum);
+    const rejected = await send("/v1/account/avatar", "PUT", maximum + 1);
+    expect(rejected.status).toBe(413);
+    expect(rejected.body.error?.code).toBe("body_too_large");
+    expect((await send("/v1/account", "PATCH", 1024 * 1024 + 1)).status).toBe(413);
+    expect((await send("/v1/account/avatar", "POST", 1024 * 1024 + 1)).status).toBe(413);
+  } finally {
+    await server.stop(true);
+  }
+});

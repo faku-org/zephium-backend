@@ -128,9 +128,9 @@ Invite-only OTP sending remains generic202. Uninvited redemption returns **401 `
 
 Settlement uses provider-reported actual usage with the request's snapshotted customer tariff, capped by the authorized reservation, and releases unused holds. Provider-cost accounting uses its separate rate snapshot. A regression reserves110 customer units and95 provider-budget units, then settles actual usage to9 customer units and4 provider-cost units, with zero remaining holds/allocations. Later policy changes and duplicate settlement cannot reprice or recharge that request. The historical equality between customer debit and conservative provider estimate came from identical configured tariffs, not from retaining the reservation. These staged tariffs remain fixtures until final retail pricing is approved.
 
-## Proposed account avatars
+## Account avatars
 
-The [avatar contract](avatar-contract.md) defines the proposed upload/delete/private image endpoints, limits, error codes, export and client caching behavior. It is not implemented or deployed yet. The desktop picker can use that proposal for coordination; existing account responses do not yet expose `avatar_url`.
+The [avatar contract](avatar-contract.md) defines the implemented upload/delete/private image endpoints, limits, error codes, export and client caching behavior. Repository implementation is complete; staging activation is reported separately. `GET /v1/account` adds nullable `avatar_url`; export embeds the processed image. Rust must fetch the protected versioned URL using its bearer and provide only image bytes to the UI. Cancel a pending upload before removal, revalidate private cached bytes and clear local avatar caches on sign-out.
 
 ## Checkout tax clarification — 2026-10-21
 

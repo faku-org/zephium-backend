@@ -1,12 +1,14 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AccountService } from "./account";
+import { createAvatarRoutes } from "./avatars/routes";
 import type { IdentityEnvironment } from "./contracts";
 
 export function createAccountRoutes(service: AccountService) {
   const app = new Hono<IdentityEnvironment>();
   const emailChange = z.object({ email: z.email().max(254) }).strict();
-  app.get("/v1/account", (c) => c.json(service.account(c.get("identity"))));
+  app.route("/", createAvatarRoutes(service.avatars));
+  app.get("/v1/account", async (c) => c.json(await service.account(c.get("identity"))));
   app.patch("/v1/account", async (c) => {
     const { name } = z
       .object({

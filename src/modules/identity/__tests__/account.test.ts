@@ -214,7 +214,7 @@ test("sign-in email subject and first line contain the six-digit code", async ()
   });
   await mailer.sendOTP("test@example.test", "123456", "sign-in");
   expect(sent?.subject).toBe("Your Zephium code is 123456");
-  expect(sent?.text.split("\n")[0]).toBe("Your Zephium code is 123456.");
+  expect(sent?.text.split("\n")[0]).toBe("Your Zephium code is 123456");
 });
 
 test("mutation freshness uses current persisted session state while deletion accepts an older valid session", async () => {

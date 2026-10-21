@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import sharp from "sharp";
 import { applyTopup } from "../src/modules/credits/grants";
+import { processAvatar } from "../src/modules/identity/avatars/processor";
 import { createDatabase, type Database } from "../src/platform/db";
 import { testPolicy } from "../tests/support/cloud-fixture";
 import { testDatabase } from "../tests/support/database";
@@ -35,6 +37,8 @@ async function snapshot(db: Database, userId: string) {
     account:
       await db.sql`SELECT u.*, b.* FROM auth_user u JOIN billing_customer b ON b.user_id=u.id WHERE u.id=${userId}`,
     migrations: await db.sql`SELECT name,digest FROM schema_migration ORDER BY name`,
+    avatars:
+      await db.sql`SELECT user_id,version,encode(content,'hex') AS content_hex,sha256,width,height,updated_at FROM account_avatar WHERE user_id=${userId}`,
     eligibility: await db.sql`SELECT * FROM email_eligibility ORDER BY key`,
     aliases: await db.sql`SELECT * FROM email_eligibility_alias ORDER BY alias_key`,
     actions: await db.sql`SELECT * FROM action_otp WHERE owner_user_id=${userId}`,
@@ -84,6 +88,13 @@ try {
 
   await fixture.db
     .sql`INSERT INTO auth_user(id,name,email,email_verified) VALUES (${id},'Restore fixture','restore@example.test',true)`;
+  const avatar = await processAvatar(
+    await sharp({ create: { width: 16, height: 16, channels: 3, background: "#7656ab" } })
+      .png()
+      .toBuffer(),
+  );
+  await fixture.db
+    .sql`INSERT INTO account_avatar(user_id,version,content,sha256) VALUES (${id},${crypto.randomUUID()},${avatar},${createHash("sha256").update(avatar).digest("hex")})`;
   await fixture.db
     .sql`UPDATE billing_customer SET provider_touched=true,status='active',paid_until=now()+interval '1 day',reconciled_at=now(),subscription_id='restore-subscription',product_id=${productId},period_start=now(),subscription_start=now() WHERE user_id=${id}`;
   await fixture.db

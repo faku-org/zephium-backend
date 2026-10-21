@@ -9,6 +9,7 @@ import { consume, privateKey, retryAfterSeconds } from "../../platform/abuse";
 import type { Config } from "../../platform/config";
 import type { Database } from "../../platform/db";
 import { AppError, operationalEvent } from "../../platform/errors";
+import { renderOTPEmail } from "./emails/otp";
 import * as schema from "./schema";
 
 export interface Mailer {
@@ -51,13 +52,7 @@ export function resendMailer(
         const payload: CreateEmailOptions = {
           from: config.EMAIL_FROM,
           to: email,
-          subject:
-            purpose === "deletion"
-              ? "Confirm your Zephium account deletion"
-              : purpose === "email-change"
-                ? "Confirm your Zephium email change"
-                : `Your Zephium code is ${otp}`,
-          text: `Your Zephium code is ${otp}.\nIt expires in 5 minutes. If you did not request it, ignore this email.`,
+          ...renderOTPEmail(otp, purpose),
         };
         // A typed REST adapter gives cancellation without SDK error-body logging.
         const response = await transport("https://api.resend.com/emails", {

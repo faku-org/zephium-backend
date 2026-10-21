@@ -89,3 +89,64 @@ test("allowlist validates exact email entries and bounded delivery configuration
   expect(() => readConfig({ ...base, EMAIL_MAX_IN_FLIGHT: "0" })).toThrow();
   expect(() => readConfig({ ...base, EMAIL_MAX_IN_FLIGHT: "17" })).toThrow();
 });
+
+test("Resend delivers the complete purpose-specific multipart payload through the existing adapter", async () => {
+  const deliveries: { url: string; init: RequestInit }[] = [];
+  const mailer = resendMailer(config(), async (url, init) => {
+    deliveries.push({ url, init });
+    return new Response(null, { status: 202 });
+  });
+  const purposes = [undefined, "sign-in", "email-change", "deletion"] as const;
+  const instructions = [
+    "sign in or finish creating your account",
+    "sign in or finish creating your account",
+    "verify your new email address and confirm the change",
+    "Entering this code in Zephium authorizes deletion of your Zephium account.",
+  ];
+  for (const purpose of purposes) {
+    await mailer.sendOTP("recipient@example.test", "012345", purpose);
+  }
+  expect(deliveries).toHaveLength(purposes.length);
+  for (const [index, { url, init }] of deliveries.entries()) {
+    expect(url).toBe("https://api.resend.com/emails");
+    expect(init.method).toBe("POST");
+    expect(init.redirect).toBe("error");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    const headers = new Headers(init.headers);
+    expect(headers.get("Authorization")).toBe("Bearer test");
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
+    const payload = JSON.parse(init.body as string);
+    expect(Object.keys(payload).sort()).toEqual(["from", "html", "subject", "text", "to"]);
+    expect(payload.from).toBe(config().EMAIL_FROM);
+    expect(payload.to).toBe("recipient@example.test");
+    expect(payload.subject).toBe("Your Zephium code is 012345");
+    expect(payload.text.split("\n")[0]).toBe(payload.subject);
+    expect(payload.text).toContain(instructions[index]);
+    expect(payload.html).toContain(instructions[index]);
+    expect(payload.html).not.toContain("recipient@example.test");
+    expect(payload.html).toContain("<title>Your Zephium code is 012345</title>");
+  }
+  const keys = deliveries.map(({ init }) => new Headers(init.headers).get("Idempotency-Key"));
+  expect(new Set(keys).size).toBe(deliveries.length);
+});
+
+test("invalid email template input fails closed before reaching Resend", async () => {
+  let calls = 0;
+  const transport = async () => {
+    calls++;
+    return new Response(null, { status: 202 });
+  };
+  for (const [otp, purpose] of [
+    ["<script>", "sign-in"],
+    ["123456\n", "deletion"],
+    ["012345", "unsupported"],
+  ] as const) {
+    // Separate mailers avoid the shared cooldown intentionally established on failure.
+    const mailer = resendMailer(config(), transport);
+    await expect(
+      mailer.sendOTP("recipient@example.test", otp, purpose as "sign-in"),
+    ).rejects.toMatchObject({ code: "email_unavailable", status: 503 });
+  }
+  expect(calls).toBe(0);
+});

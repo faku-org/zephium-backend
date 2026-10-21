@@ -2,12 +2,14 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 const time = (name: string) => timestamp(name, { withTimezone: true });
@@ -43,6 +45,28 @@ export const user = pgTable("auth_user", {
   lifecycle: text("lifecycle").notNull().default("active"),
   eligibilityKey: text("eligibility_key").references(() => emailEligibility.key),
 });
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+export const accountAvatar = pgTable(
+  "account_avatar",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    version: uuid("version").notNull().unique(),
+    content: bytea("content").notNull(),
+    sha256: text("sha256").notNull(),
+    width: integer("width").notNull().default(256),
+    height: integer("height").notNull().default(256),
+    updatedAt: time("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    check("account_avatar_content_check", sql`octet_length(${t.content}) BETWEEN 1 AND 262144`),
+    check("account_avatar_sha256_check", sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
+    check("account_avatar_width_check", sql`${t.width} = 256`),
+    check("account_avatar_height_check", sql`${t.height} = 256`),
+  ],
+);
+
 export const session = pgTable(
   "auth_session",
   {

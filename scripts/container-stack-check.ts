@@ -287,6 +287,11 @@ try {
     return response.ok;
   });
   await waitFor("worker", () => health("worker"));
+  await checked(
+    "restricted avatar native processor",
+    comp(["exec", "-T", "api", "bun", "scripts/avatar-smoke.ts"]),
+    20,
+  );
 
   const apiId = await container("api");
   const workerId = await container("worker");
@@ -396,6 +401,11 @@ try {
   );
   if (privilege.code !== 0 || privilege.stdout !== "zephium_app:false")
     throw new Error("Runtime role has unexpected schema privileges");
+  const avatarPrivileges = await appRole(
+    "SELECT bool_and(has_table_privilege(current_user, 'account_avatar', privilege))::text FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS privilege",
+  );
+  if (avatarPrivileges.code !== 0 || avatarPrivileges.stdout !== "true")
+    throw new Error("Runtime role cannot maintain account avatars");
   const create = await appRole("CREATE TABLE zephium_stack_forbidden(id integer)");
   // psql -c and script execution use different nonzero exit statuses. Assert the
   // actual PostgreSQL permission denial instead of mistaking exit 1 for success.

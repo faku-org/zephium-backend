@@ -134,7 +134,7 @@
         "summary": "Export account without secrets",
         "responses": {
           "200": {
-            "description": "Content-free account export without credentials",
+            "description": "Account export without credentials, including the current processed avatar",
             "content": {
               "application/json": {
                 "schema": {
@@ -168,13 +168,36 @@
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "avatar_url": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "avatar": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/AvatarExport"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
                         "email",
                         "name",
-                        "createdAt"
+                        "createdAt",
+                        "avatar_url",
+                        "avatar"
                       ],
                       "additionalProperties": false
                     },
@@ -1631,6 +1654,166 @@
           }
         }
       }
+    },
+    "/v1/account/avatar": {
+      "put": {
+        "summary": "Replace the caller avatar with a normalized private image",
+        "description": "One file part only, at most 2097152 bytes plus 16384 bytes of multipart framing. Single-frame input only; decoded dimensions and processing time are bounded. Six attempts per hour per account.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Still PNG, JPEG or WebP; maximum 2 MiB"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current avatar reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarReference"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "408": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove the caller avatar idempotently",
+        "responses": {
+          "200": {
+            "description": "Current avatar reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarReference"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account/avatar/{version}.webp": {
+      "get": {
+        "summary": "Read the caller current private avatar",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Authentication and current-version ownership are checked before conditional responses. Foreign, deleted and superseded versions return avatar_not_found. Cache-Control: private, no-cache; Vary: Authorization.",
+        "responses": {
+          "200": {
+            "description": "Normalized 256x256 WebP with exact Content-Length, strong ETag and nosniff",
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-cache"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Authenticated current representation is unchanged; no response body"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1777,6 +1960,17 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1784,7 +1978,8 @@
           "email",
           "name",
           "emailVerified",
-          "createdAt"
+          "createdAt",
+          "avatar_url"
         ],
         "additionalProperties": false
       },
@@ -3139,6 +3334,56 @@
           "recurring_price",
           "expires_at",
           "error"
+        ],
+        "additionalProperties": false
+      },
+      "AvatarReference": {
+        "type": "object",
+        "properties": {
+          "avatar_url": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "avatar_url"
+        ],
+        "additionalProperties": false
+      },
+      "AvatarExport": {
+        "type": "object",
+        "properties": {
+          "media_type": {
+            "const": "image/webp"
+          },
+          "width": {
+            "const": 256
+          },
+          "height": {
+            "const": 256
+          },
+          "encoding": {
+            "const": "base64"
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "maxLength": 349528
+          }
+        },
+        "required": [
+          "media_type",
+          "width",
+          "height",
+          "encoding",
+          "data"
         ],
         "additionalProperties": false
       }

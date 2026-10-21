@@ -13,8 +13,9 @@ COPY package.json LICENSE COMMERCIAL-LICENSING.md ./
 COPY src ./src
 COPY config ./config
 COPY migrations ./migrations
-COPY scripts/migrate.ts scripts/cloud-policy.ts scripts/notify.ts ./scripts/
+COPY scripts/migrate.ts scripts/cloud-policy.ts scripts/notify.ts scripts/avatar-smoke.ts ./scripts/
 USER bun
+RUN bun scripts/avatar-smoke.ts
 ENV NODE_ENV=production PORT=3000
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD bun -e 'const r=await fetch("http://127.0.0.1:3000/health/ready");process.exit(r.ok?0:1)'

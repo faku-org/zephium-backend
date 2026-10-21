@@ -25,6 +25,7 @@
     "hono": "4.13.7",
     "postgres": "3.4.9",
     "resend": "6.26.0",
+    "sharp": "0.35.5",
     "standardwebhooks": "1.1.1",
     "zod": "4.5.4"
   },

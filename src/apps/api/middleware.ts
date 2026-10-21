@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { audioRoute } from "../../modules/ai";
-import type { IdentityEnvironment } from "../../modules/identity";
+import { avatarPath, type IdentityEnvironment } from "../../modules/identity";
 import { enforce, privateKey } from "../../platform/abuse";
 import type { Config } from "../../platform/config";
 import type { Database } from "../../platform/db";
@@ -36,7 +36,7 @@ export function installHttpMiddleware(
   const origins = new Set(config.TRUSTED_ORIGINS.split(","));
   let activeHTTP = 0;
   app.use("*", async (_c, next) => {
-    if (_c.req.path === audioRoute) markIncomingStart(_c.req.raw);
+    if (_c.req.path === audioRoute || _c.req.path === avatarPath) markIncomingStart(_c.req.raw);
     if (activeHTTP >= 32) return errorResponse(new AppError("server_busy", 503));
     activeHTTP++;
     try {
@@ -50,8 +50,12 @@ export function installHttpMiddleware(
     maxSize: 8 * 1024 * 1024,
     onError: () => errorResponse(new AppError("body_too_large", 413)),
   });
-  // Audio owns a timed bounded read, including requests without Content-Length.
-  app.use("*", (c, next) => (c.req.path === audioRoute ? next() : limitBody(c, next)));
+  // Media routes own timed bounded reads, including requests without Content-Length.
+  app.use("*", (c, next) =>
+    c.req.path === audioRoute || (c.req.path === avatarPath && c.req.method === "PUT")
+      ? next()
+      : limitBody(c, next),
+  );
   app.use("*", async (c, next) => {
     c.header("Cache-Control", "no-store");
     const origin = c.req.header("origin");

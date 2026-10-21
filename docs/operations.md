@@ -50,7 +50,7 @@ Only API receives public HTTPS traffic; PostgreSQL and worker have no public ing
 
 Keep staging and production secrets, databases, provider projects, Polar environments and backup paths separate. Enter secrets directly into the secret store, never chat or Git. Restrict SSH/Coolify access to operators and require MFA. PostgreSQL role initialization runs only for a fresh volume; existing passwords and roles need explicit maintenance. Never delete a volume to repair role or migration failures.
 
-The API retains account, billing, policy, grant and usage records. It does not persist prompts, page text, output, images or audio. External email, billing and model providers have their own retention terms. Avoid logging request content, OTPs, credentials or raw identifiers during troubleshooting.
+The API retains account, billing, policy, grant and usage records. It also retains the current processed account avatar when a user uploads one. It does not persist prompts, page text, generated output, or AI image/audio inputs. External email, billing and model providers have their own retention terms. Avoid logging request content, OTPs, credentials or raw identifiers during troubleshooting.
 
 ## Enrollment and email behavior
 
@@ -89,3 +89,11 @@ Apply `0009_billing_contact_jobs.sql` before starting images with contact synchr
 Contact work has separate attempts and scheduling from subscription reconciliation. A lost update response is recovered by reading current customer state; an already-matching contact needs no second write. Ten failures trigger a content-free operational alert while subscription refresh continues. Contact-only exhaustion does not mark the whole worker unready. Deleting accounts and pending subscription changes are excluded; account purge removes obsolete contact jobs.
 
 After correcting provider permissions or a contact conflict, an operator may reset the specific `billing_contact_job` row's attempts and next-attempt time to retry the latest verified address. Do not edit the account's verified email, change external customer IDs, or clear billing/credit safety records as a workaround. Existing `customers:write` permission is required.
+
+## Account avatars and transactional email
+
+Apply `0010_account_avatars.sql` before starting the avatar-enabled API. It adds one bounded binary row per account without changing existing billing data. Only re-encoded 256×256 WebP bytes and minimal version metadata are stored. Account deletion immediately removes the avatar before deferred billing cleanup; encrypted historical backups expire under the normal retention policy. The API child image processor receives no provider/database credentials, has an eight-second parent deadline, and admits at most two concurrent jobs with no queue. Both image builds and the restricted container check run a synthetic native-codec smoke check.
+
+Identity mail now contains purpose-specific HTML and equivalent plain text for sign-in/signup verification, email change and deletion. These remain one-time, five-minute codes; no welcome/marketing automation or duplicate billing mail is added. Templates contain no remote assets or tracking links. Resend's own open/click tracking must separately be disabled and verified at the provider. Do not infer that a template alone disables provider tracking.
+
+Before public launch, choose a transactional sending quota suitable for verified signup and retries, verify DMARC alignment and bounce/suppression handling, confirm representative inbox rendering/autofill, and update the website privacy notice for stored profile images and backup retention. As of the October 21 inspection, the Resend account was on the free 100/day and 3,000/month caps; the existing send key could not retrieve domain tracking settings. This does not establish production email capacity or tracking status.

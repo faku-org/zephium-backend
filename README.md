@@ -1,6 +1,6 @@
 # Zephium backend
 
-Accounts, billing, credits, and optional Cloud AI for Zephium. The desktop runs its agent loop and browser tools locally. This server authenticates accounts, forwards provider-native requests, and accounts for usage without storing prompts, pages, images, audio, or generated output.
+Accounts, billing, credits, and optional Cloud AI for Zephium. The desktop runs its agent loop and browser tools locally. This server authenticates accounts, forwards provider-native requests, and accounts for usage without storing prompts, pages, AI image/audio inputs, or generated output. Optional account avatars are retained separately as normalized profile images.
 
 ## Quick start
 

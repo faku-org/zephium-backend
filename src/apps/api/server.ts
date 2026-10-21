@@ -1,3 +1,4 @@
+import { avatarPath, avatarRequestBytes } from "../../modules/identity";
 import { AppError, errorResponse } from "../../platform/errors";
 import { markIncomingStart, readIncomingBody } from "../../platform/incoming-body";
 
@@ -36,7 +37,13 @@ export function createApiServer(
         if (request.body) {
           const bytes = await readIncomingBody(
             request,
-            generation ? (path === "/v1/systemone" ? 81920 : 8 * 1024 * 1024) : 1024 * 1024,
+            generation
+              ? path === "/v1/systemone"
+                ? 81920
+                : 8 * 1024 * 1024
+              : request.method === "PUT" && path === avatarPath
+                ? avatarRequestBytes
+                : 1024 * 1024,
           );
           const headers = new Headers(request.headers);
           headers.delete("transfer-encoding");

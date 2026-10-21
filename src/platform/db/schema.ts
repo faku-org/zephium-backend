@@ -20,6 +20,7 @@ export {
 } from "../../modules/credits/schema";
 export {
   account,
+  accountAvatar,
   actionOtp,
   emailEligibility,
   emailEligibilityAlias,

@@ -1,6 +1,7 @@
 export { type AccountService, createAccountService } from "./account";
 export { createAccountRoutes } from "./account-routes";
 export { type Auth, createAuth, type Mailer, resendMailer } from "./auth";
+export { avatarPath, avatarRequestBytes } from "./avatars/limits";
 export type { AccountMutationHooks, IdentityEnvironment, IdentitySession } from "./contracts";
 export {
   type GrantEligibility,

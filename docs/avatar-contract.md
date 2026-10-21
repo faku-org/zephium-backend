@@ -1,6 +1,6 @@
 # Account avatar contract
 
-Status: proposed on 2026-10-21 for desktop/backend coordination. These routes are not implemented or deployed yet. The existing account API remains unchanged until the implementation is qualified.
+Status: implemented in the repository on 2026-10-21; staging deployment and live qualification are tracked separately in the desktop handoff.
 
 ## Ownership and access
 
@@ -29,7 +29,7 @@ Apply EXIF orientation before stripping metadata, convert to sRGB, center-crop t
 
 Use a maintained, pinned image decoder with strict malformed-input handling, a maximum of 16,777,216 decoded pixels and 8,192 pixels on either axis. Bound upload duration, decoder execution and concurrent transformations; avoid an unbounded work queue. Output is limited to 256 KiB. A failed or interrupted transformation leaves the previous avatar intact. The implementation must recheck account/session status under the account mutation lock before storing the result, so deletion or sign-out during processing cannot recreate data.
 
-Store only the normalized WebP and minimal version/digest/dimension metadata in one PostgreSQL row per account. This keeps the current service stateless and self-hostable without a new bucket or container filesystem dependency. Replacements atomically discard the old row's bytes. No original uploads, filenames, EXIF, image bodies or decoder dumps belong in logs, billing events or analytics. PostgreSQL's existing encrypted backup policy covers the retained avatar. Account avatars are deliberate profile uploads, separate from the browsing/AI content the gateway never persists. Before activation, the public privacy notice must describe stored profile images and backup retention.
+Store only the normalized WebP and minimal version/digest/dimension metadata in one PostgreSQL row per account. This keeps the current service stateless and self-hostable without a new bucket or container filesystem dependency. Replacements atomically discard the old row's bytes. Overlapping avatar writes serialize at commit; the desktop cancels an in-flight upload before requesting removal. Account deletion and session revocation independently prevent pending uploads from saving. No original uploads, filenames, EXIF, image bodies or decoder dumps belong in logs, billing events or analytics. PostgreSQL's existing encrypted backup policy covers the retained avatar. Account avatars are deliberate profile uploads, separate from the browsing/AI content the gateway never persists. Before public launch, the privacy notice must describe stored profile images and backup retention. Private staging qualification uses the owner-approved test accounts.
 
 On code-confirmed account deletion, remove the avatar in the same transaction that disables account access; billing cleanup must not keep it accessible. A cascading account foreign key is an additional final-purge safeguard. Historical encrypted backups expire under the documented backup-retention policy.
 
@@ -56,6 +56,7 @@ Use the existing `{error:{code,retry_after?},request_id}` envelope and genuine R
 | HTTP | Code | Desktop meaning |
 | --- | --- | --- |
 | 400 | `invalid_avatar` | Missing/duplicate file, malformed multipart, empty or undecodable image |
+| 408 | `request_timeout` | Upload timed out or was cancelled; retry only if still desired |
 | 413 | `body_too_large` | File or multipart body exceeds its byte limit |
 | 415 | `unsupported_avatar_format` | Unsupported type or animated/multipage image; choose a still PNG/JPEG/WebP |
 | 422 | `avatar_dimensions_exceeded` | Resize the image before uploading |
@@ -70,4 +71,4 @@ Existing 401 `unauthorized` and 403 account-state errors still apply. Ordinary a
 
 Test byte and pixel limits, forged MIME types, malformed/animated images, orientation/crop behavior and absence of metadata in output; cross-account access and 304 authorization; concurrent replacement, sign-out and deletion during decoding; failed transforms preserving the old image; actual image bytes in export; and cascade/early-deletion cleanup. Exercise the built container's native decoder with the pinned Bun runtime. The desktop pass should confirm upload, restart, a second signed-in device, replacement and removal.
 
-The proposed decoder approach uses [Sharp's input limits](https://sharp.pixelplumbing.com/api-constructor/) and [explicit WebP output with metadata removal](https://sharp.pixelplumbing.com/api-output/). No dependency or runtime route has been added by this proposal.
+The proposed decoder approach uses [Sharp's input limits](https://sharp.pixelplumbing.com/api-constructor/) and [explicit WebP output with metadata removal](https://sharp.pixelplumbing.com/api-output/). Sharp is pinned; re-encoding runs in at most two short-lived subprocesses, with an eight-second parent deadline and a five-second codec processing deadline. Child environments exclude application secrets.

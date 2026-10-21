@@ -25,7 +25,9 @@ These routes require a verified, active session. Session IDs are scoped to the c
 
 `GET /v1/billing` and `POST /v1/billing/refresh` include `subscription.plan` and `subscription.interval` (`"monthly"|"yearly"|null`). They describe the current recognized paid subscription; both are null when there is none, its state is stale/expired/unrecognized, or billing is disabled. Cancellation at period end retains them while paid access remains valid. `usage.plan` remains authoritative for effective model access, including Free/self-hosted plans.
 
-`GET /v1/account/export` returns `schemaVersion:1`, an `account` object, current `billing`, nullable `usage`, `usage_history_url`, and safe `sessions`; it excludes bearer tokens and private keys. `GET /v1/usage/requests` below supplies paginated accounting history.
+`GET /v1/account` includes nullable `avatar_url`. `PUT /v1/account/avatar` accepts one multipart `file` (PNG/JPEG/WebP, at most 2 MiB) and returns `{avatar_url}` after server re-encoding. `DELETE /v1/account/avatar` returns `{avatar_url:null}` idempotently. The versioned URL requires the same account bearer and serves only the current 256×256 WebP; authenticated ETag revalidation uses private caching. See the [avatar contract](avatar-contract.md) for limits, status codes, caching and deletion behavior. Rust downloads the bytes; never put a bearer in an image URL or webview.
+
+`GET /v1/account/export` returns `schemaVersion:1`, an `account` object including `avatar_url` and nullable `avatar` with the processed WebP bytes encoded as base64, current `billing`, nullable `usage`, `usage_history_url`, and safe `sessions`; it excludes bearer tokens and private keys. `GET /v1/usage/requests` below supplies paginated accounting history.
 
 | Method and path | Request | Result |
 | --- | --- | --- |

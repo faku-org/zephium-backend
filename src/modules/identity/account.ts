@@ -4,6 +4,7 @@ import type { Database } from "../../platform/db";
 import { AppError } from "../../platform/errors";
 import { consumeActionCode, requestActionCode } from "./actions";
 import type { Mailer } from "./auth";
+import { createAvatarService } from "./avatars/service";
 import type { AccountMutationHooks, IdentitySession } from "./contracts";
 import { normalizeEmail } from "./eligibility";
 import { assertMutationSession } from "./session";
@@ -14,6 +15,7 @@ export function createAccountService(
   mailer: Mailer,
   hooks: AccountMutationHooks,
 ) {
+  const avatars = createAvatarService(config, db);
   function requireRecentSignIn(identity: IdentitySession) {
     if (Date.now() - new Date(identity.session.createdAt).getTime() > 600000)
       throw new AppError("reauthentication_required", 401);
@@ -54,7 +56,10 @@ export function createAccountService(
     });
   }
   return {
-    account,
+    avatars,
+    async account(identity: IdentitySession) {
+      return { ...account(identity), ...(await avatars.profile(identity.user.id)) };
+    },
     sessions,
     async updateProfile(identity: IdentitySession, name: string | null) {
       await mutate(identity, async (tx) => {
@@ -66,7 +71,7 @@ export function createAccountService(
       const { emailVerified: _verified, ...u } = account(identity);
       return {
         schemaVersion: 1,
-        account: u,
+        account: { ...u, ...(await avatars.export(identity.user.id)) },
         ...(await hooks.exportExtras(identity.user.id)),
         usage_history_url: "/v1/usage/requests",
         sessions: await sessions(identity),
@@ -99,6 +104,7 @@ export function createAccountService(
         async (tx) => {
           const [current] = await tx`SELECT email FROM auth_user WHERE id=${identity.user.id}`;
           await tx`UPDATE auth_user SET lifecycle='deleting',updated_at=clock_timestamp() WHERE id=${identity.user.id}`;
+          await tx`DELETE FROM account_avatar WHERE user_id=${identity.user.id}`;
           await tx`DELETE FROM auth_session WHERE user_id=${identity.user.id}`;
           for (const purpose of ["sign-in", "email-verification", "forget-password"])
             await tx`DELETE FROM auth_verification WHERE identifier=${`${purpose}-otp-${current?.email}`}`;
