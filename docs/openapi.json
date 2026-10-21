@@ -3068,13 +3068,21 @@
                 "type": "string"
               },
               "tax_excluded": {
-                "const": true
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Null when tax inclusion is unknown. No customer-specific tax calculation has been performed."
+              },
+              "tax_calculation": {
+                "const": "not_calculated"
               }
             },
             "required": [
               "amount_minor",
               "currency",
-              "tax_excluded"
+              "tax_excluded",
+              "tax_calculation"
             ],
             "additionalProperties": false
           },

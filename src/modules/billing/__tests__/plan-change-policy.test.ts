@@ -99,7 +99,7 @@ test("upgrade quote estimates the remaining half period and serializes its full 
     behavior: "invoice",
     estimated_prorated_amount_minor: 4000,
     estimate: true,
-    tax_excluded: true,
+    tax_excluded: null,
     target_amount_minor: 10000,
     current_allowance_units: "100",
     target_allowance_units: "500",

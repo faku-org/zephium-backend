@@ -238,12 +238,20 @@ test("subscription HTTP preview and receipts enforce ownership and duplicate con
     interval: "monthly",
     direction: "upgrade",
     effective_at: null,
-    amount_due_estimate: { amount_minor: expect.any(Number), currency: "USD", tax_excluded: true },
+    amount_due_estimate: {
+      amount_minor: expect.any(Number),
+      currency: "USD",
+      tax_excluded: null,
+      tax_calculation: "not_calculated",
+    },
     recurring_price: { amount_minor: 10000, currency: "USD" },
     expires_at: expect.any(String),
     error: null,
   });
   expect(ctx.mutations()).toBe(0);
+  // Old persisted quotes must not keep advertising unverified tax-exclusive amounts.
+  await ctx.db
+    .sql`UPDATE billing_plan_change SET quote=jsonb_set(quote,'{tax_excluded}','true'::jsonb) WHERE id=${quote.id}`;
   const receiptPath = `/v1/billing/subscription/changes/${quote.id}`;
   const owned = await request(ctx.target, receiptPath, "GET", undefined, ctx.owner.token);
   expect(await owned.json()).toEqual(quote);

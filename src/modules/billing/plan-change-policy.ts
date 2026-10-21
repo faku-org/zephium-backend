@@ -148,7 +148,7 @@ export function quotePlanChange(
     behavior: direction === "upgrade" ? ("invoice" as const) : ("next_period" as const),
     estimated_prorated_amount_minor: Number(prorated),
     estimate: true,
-    tax_excluded: true,
+    tax_excluded: null as boolean | null,
     target_amount_minor: offer.price.amount_minor,
     current_allowance_units: currentPlan.allowanceUnits,
     target_allowance_units: targetPlan.allowanceUnits,

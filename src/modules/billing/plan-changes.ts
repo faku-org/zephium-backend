@@ -41,7 +41,10 @@ export function planChangeView(row: PlanChangeRow) {
     amount_due_estimate: {
       amount_minor: q.estimated_prorated_amount_minor,
       currency: q.currency,
-      tax_excluded: true,
+      // Product amounts may include tax; no customer tax calculation occurred.
+      // Normalize historical quotes too, without rewriting their stored snapshots.
+      tax_excluded: null,
+      tax_calculation: "not_calculated" as const,
     },
     recurring_price: { amount_minor: q.target_amount_minor, currency: q.currency },
     expires_at: q.expires_at,
