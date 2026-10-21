@@ -4,12 +4,12 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer, emailOTP } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type { TransactionSql } from "postgres";
-import type { CreateEmailOptions } from "resend";
+import type { EmailApiOptions } from "resend";
 import { consume, privateKey, retryAfterSeconds } from "../../platform/abuse";
 import type { Config } from "../../platform/config";
 import type { Database } from "../../platform/db";
 import { AppError, operationalEvent } from "../../platform/errors";
-import { renderOTPEmail } from "./emails/otp";
+import { otpEmailLogo, renderOTPEmail } from "./emails/otp";
 import * as schema from "./schema";
 
 export interface Mailer {
@@ -49,10 +49,11 @@ export function resendMailer(
     {
       async sendOTP(email, otp, purpose) {
         if (!config.RESEND_API_KEY) throw new AppError("email_unavailable", 503);
-        const payload: CreateEmailOptions = {
+        const payload: EmailApiOptions = {
           from: config.EMAIL_FROM,
           to: email,
           ...renderOTPEmail(otp, purpose),
+          attachments: [otpEmailLogo],
         };
         // A typed REST adapter gives cancellation without SDK error-body logging.
         const response = await transport("https://api.resend.com/emails", {

@@ -3,6 +3,7 @@ import { retryAfterSeconds } from "../../../platform/abuse";
 import { readConfig } from "../../../platform/config";
 import { AppError } from "../../../platform/errors";
 import { boundedMailer, resendMailer } from "../auth";
+import { otpEmailLogo } from "../emails/otp";
 
 const config = () =>
   readConfig({
@@ -101,7 +102,7 @@ test("Resend delivers the complete purpose-specific multipart payload through th
     "sign in or finish creating your account",
     "sign in or finish creating your account",
     "verify your new email address and confirm the change",
-    "Entering this code in Zephium authorizes deletion of your Zephium account.",
+    "Enter this code in Zephium to permanently delete your account.",
   ];
   for (const purpose of purposes) {
     await mailer.sendOTP("recipient@example.test", "012345", purpose);
@@ -117,7 +118,16 @@ test("Resend delivers the complete purpose-specific multipart payload through th
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
     const payload = JSON.parse(init.body as string);
-    expect(Object.keys(payload).sort()).toEqual(["from", "html", "subject", "text", "to"]);
+    expect(Object.keys(payload).sort()).toEqual([
+      "attachments",
+      "from",
+      "html",
+      "subject",
+      "text",
+      "to",
+    ]);
+    expect(payload.attachments).toEqual([otpEmailLogo]);
+    expect(payload.html).toContain(`src="cid:${otpEmailLogo.content_id}"`);
     expect(payload.from).toBe(config().EMAIL_FROM);
     expect(payload.to).toBe("recipient@example.test");
     expect(payload.subject).toBe("Your Zephium code is 012345");

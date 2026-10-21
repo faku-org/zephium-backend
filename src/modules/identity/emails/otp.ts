@@ -1,31 +1,76 @@
+import { readFileSync } from "node:fs";
+
 export type IdentityEmailPurpose = "sign-in" | "email-change" | "deletion";
 
 const copy = {
   "sign-in": {
-    label: "Account access",
     title: "Sign in to Zephium",
-    instruction: "Enter this code in Zephium to sign in or finish creating your account.",
-    viewing: "Opening this email does not sign you in or create an account.",
-    unsolicited: "If you did not request this code, you can ignore this email.",
+    lead: ["Enter this code in Zephium to sign in or finish creating your account."],
+    unsolicited: "If you didn’t request this code, you can ignore this email.",
   },
   "email-change": {
-    label: "Email verification",
     title: "Verify your new email",
-    instruction:
-      "Enter this code in Zephium to verify your new email address and confirm the change.",
-    viewing: "Opening this email does not change your account email address.",
-    unsolicited:
-      "If you did not request an email change, do not enter the code. You can ignore this email.",
+    lead: ["Enter this code in Zephium to verify your new email address and confirm the change."],
+    unsolicited: "If you didn’t ask to use this address with Zephium, you can ignore this email.",
   },
   deletion: {
-    label: "Account deletion",
-    title: "Confirm account deletion",
-    instruction: "Entering this code in Zephium authorizes deletion of your Zephium account.",
-    viewing: "Opening this email does not delete your account.",
+    title: "Delete your account",
+    lead: [
+      "Enter this code in Zephium to permanently delete your account.",
+      "This ends any paid plan, removes your remaining credits and signs out every device. It can’t be undone.",
+    ],
     unsolicited:
-      "If you did not request account deletion, do not enter the code. You can ignore this email.",
+      "Didn’t request this? Don’t enter the code, and sign out unfamiliar devices in Settings\u00a0→\u00a0Account.",
   },
 } as const;
+
+const expiry = "Expires in 5 minutes and can be used only once.";
+const neverShare = "Zephium will never ask you to share it.";
+
+/**
+ * The mark travels with the message as an inline (CID) attachment, so it shows
+ * when remote images are blocked and the email fetches nothing from a server.
+ * Fields use Resend's REST names because the mailer posts JSON directly.
+ */
+export const otpEmailLogo = {
+  filename: "zephium.png",
+  content_type: "image/png",
+  content_id: "zephium-mark",
+  content: readFileSync(new URL("./zephium-mark.png", import.meta.url)).toString("base64"),
+} as const;
+
+const font =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+
+const light = {
+  ground: "#ffffff",
+  plate: "#f3f3f5",
+  rule: "#e9e9ec",
+  text: "#1c1c1f",
+  secondary: "#55555c",
+  tertiary: "#75757c",
+};
+const dark = {
+  ground: "#18181b",
+  plate: "#242428",
+  rule: "#2e2e33",
+  text: "#f4f4f6",
+  secondary: "#b1b1b7",
+  tertiary: "#8c8c93",
+};
+
+// Outlook.com marks the elements it recolours with data-ogsb/data-ogsc; the
+// same palette is pinned there so its automatic inversion cannot pick its own.
+const darkRules = (background: string, color: string) =>
+  `${background}.z-ground { background-color: ${dark.ground} !important; }
+      ${background}.z-plate { background-color: ${dark.plate} !important; }
+      ${background}.z-rule { border-top-color: ${dark.rule} !important; }
+      ${color}.z-text { color: ${dark.text} !important; }
+      ${color}.z-secondary { color: ${dark.secondary} !important; }
+      ${color}.z-tertiary { color: ${dark.tertiary} !important; }`;
+
+const paragraph = (className: keyof typeof light, size: 13 | 15, margin = "0") =>
+  `class="z-${className}" style="margin:${margin}; font-family:${font}; font-size:${size}px; line-height:${size === 15 ? 24 : 20}px; color:${light[className]};"`;
 
 /** Only the six validated ASCII digits are interpolated; account data never enters the HTML. */
 export function renderOTPEmail(
@@ -44,86 +89,116 @@ export function renderOTPEmail(
   }
   const message = copy[purpose];
   const subject = `Your Zephium code is ${otp}`;
-  const expiry = "This code expires in 5 minutes and can be used only once.";
-  const safety =
-    "Do not share this code with anyone. Zephium will never ask you to send it by email.";
+  const footer = `${message.unsolicited} ${neverShare}`;
+  const lead = message.lead
+    .map((line, index) =>
+      index === 0
+        ? `<p ${paragraph("secondary", 15)}>${line}</p>`
+        : `<p ${paragraph("text", 15, "12px 0 0")}>${line}</p>`,
+    )
+    .join("\n              ");
   return {
     subject,
     text: [
       subject,
       "",
       message.title,
-      message.instruction,
       "",
+      ...message.lead.flatMap((line) => [line, ""]),
       otp,
       "",
       expiry,
-      safety,
       "",
-      message.viewing,
-      message.unsolicited,
+      footer,
       "",
       "Zephium",
     ].join("\n"),
     html: `<!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
   <meta name="color-scheme" content="light dark">
   <meta name="supported-color-schemes" content="light dark">
   <title>${subject}</title>
   <style>
     :root { color-scheme: light dark; supported-color-schemes: light dark; }
-    @media screen and (max-width: 540px) {
-      .outer { padding: 24px 12px !important; }
-      .content { padding: 28px 24px !important; }
-      .heading { font-size: 26px !important; line-height: 32px !important; }
-      .code { font-size: 34px !important; letter-spacing: 5px !important; }
-    }
-    @media (prefers-color-scheme: dark) {
-      .background { background-color: #16151a !important; }
-      .card { background-color: #222127 !important; border-color: #3c3944 !important; border-top-color: #a99af4 !important; }
-      .primary { color: #f4f2f8 !important; }
-      .secondary { color: #c8c3d1 !important; }
-      .accent { color: #c3b5ff !important; }
-      .code-box { background-color: #2e2b37 !important; border-color: #4c455f !important; }
-      .divider { border-color: #3c3944 !important; }
+    body { margin: 0; padding: 0; }
+    @media screen and (max-width: 520px) {
+      .z-frame { padding: 40px 24px 56px !important; }
+      .z-brand { padding-bottom: 40px !important; }
+      .z-title { font-size: 22px !important; line-height: 28px !important; }
     }
   </style>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      ${darkRules("", "")}
+    }
+  </style>
+  <style>
+      ${darkRules("[data-ogsb] ", "[data-ogsc] ")}
+  </style>
+  <!--[if mso]><style>h1, p, td { font-family: 'Segoe UI', Arial, sans-serif !important; }</style><![endif]-->
 </head>
-<body class="background" style="margin:0; padding:0; width:100%; background-color:#f5f4f7; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
-  <div style="display:none; max-height:0; max-width:0; overflow:hidden; opacity:0; font-size:1px; line-height:1px; mso-hide:all;">${subject}. ${message.title}. Expires in 5 minutes.</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="background" style="width:100%; background-color:#f5f4f7;">
+<body class="z-ground" style="margin:0; padding:0; width:100%; background-color:${light.ground}; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+  <div style="display:none; max-height:0; max-width:0; overflow:hidden; opacity:0; font-size:1px; line-height:1px; mso-hide:all;">${subject}. It expires in 5 minutes.${"&#8199;&#847;".repeat(24)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="z-ground" style="width:100%; background-color:${light.ground};">
     <tr>
-      <td align="center" class="outer" style="padding:48px 16px;">
-        <!--[if mso]><table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="card" style="width:100%; max-width:520px; background-color:#ffffff; border:1px solid #e5e2eb; border-top:3px solid #7860cf; border-radius:12px; border-spacing:0;">
+      <td align="center" class="z-frame" style="padding:64px 24px 72px;">
+        <!--[if mso]><table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:480px;">
           <tr>
-            <td class="content" style="padding:36px 40px; font-family:Arial, Helvetica, sans-serif;">
-              <p class="primary" style="margin:0 0 38px; color:#24212c; font-size:21px; line-height:28px; font-weight:700; letter-spacing:-0.5px;">Zephium</p>
-              <p class="accent" style="margin:0 0 10px; color:#6d52b6; font-size:12px; line-height:18px; font-weight:700; letter-spacing:1px; text-transform:uppercase;">${message.label}</p>
-              <h1 class="primary heading" style="margin:0 0 16px; color:#24212c; font-size:28px; line-height:35px; font-weight:700; letter-spacing:-0.6px;">${message.title}</h1>
-              <p class="secondary" style="margin:0 0 24px; color:#5e586a; font-size:16px; line-height:25px;">${message.instruction}</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+            <td align="left" class="z-brand" style="padding:0 0 48px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td align="center" class="code-box" style="padding:22px 12px; background-color:#f4f1fc; border:1px solid #e5def7; border-radius:8px;">
-                    <p class="primary code" dir="ltr" style="margin:0; color:#24212c; font-family:'Courier New', Courier, monospace; font-size:38px; line-height:48px; font-weight:700; letter-spacing:6px; white-space:nowrap;">${otp}</p>
+                  <td style="padding:0 10px 0 0; vertical-align:middle;"><img src="cid:${otpEmailLogo.content_id}" width="28" height="28" alt="" style="display:block; width:28px; height:28px; border:0; outline:none;"></td>
+                  <td class="z-text" style="vertical-align:middle; font-family:${font}; font-size:17px; line-height:28px; font-weight:600; letter-spacing:-0.3px; color:${light.text};">Zephium</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="left">
+              <h1 class="z-text z-title" style="margin:0; font-family:${font}; font-size:24px; line-height:32px; font-weight:600; letter-spacing:-0.4px; color:${light.text};">${message.title}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:10px 0 0;">
+              ${lead}
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:28px 0 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="z-plate" style="padding:16px 18px 16px 24px; background-color:${light.plate}; border-radius:14px;">
+                    <p class="z-text" dir="ltr" style="margin:0; font-family:${font}; font-size:40px; line-height:48px; font-weight:600; letter-spacing:6px; font-variant-numeric:tabular-nums; white-space:nowrap; color:${light.text};">${otp}</p>
                   </td>
                 </tr>
               </table>
-              <p class="secondary" style="margin:14px 0 24px; color:#5e586a; font-size:14px; line-height:22px;">${expiry}</p>
-              <p class="primary" style="margin:0 0 24px; color:#24212c; font-size:14px; line-height:22px;">${safety}</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:14px 0 0;">
+              <p ${paragraph("secondary", 13)}>${expiry}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:44px 0 0;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
-                <tr><td class="divider" style="border-top:1px solid #e5e2eb; font-size:0; line-height:0; height:24px;">&nbsp;</td></tr>
+                <tr><td class="z-rule" style="height:1px; border-top:1px solid ${light.rule}; font-size:0; line-height:0;">&nbsp;</td></tr>
               </table>
-              <p class="secondary" style="margin:0 0 10px; color:#5e586a; font-size:13px; line-height:21px;">${message.viewing}</p>
-              <p class="secondary" style="margin:0; color:#5e586a; font-size:13px; line-height:21px;">${message.unsolicited}</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:20px 0 0;">
+              <p ${paragraph("tertiary", 13)}>${footer}</p>
             </td>
           </tr>
         </table>
         <!--[if mso]></td></tr></table><![endif]-->
-        <p class="secondary" style="margin:20px 0 0; color:#5e586a; font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:18px;">Zephium · Account security</p>
       </td>
     </tr>
   </table>
