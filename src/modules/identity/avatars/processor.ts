@@ -21,7 +21,7 @@ export const processAvatar: AvatarProcessor = async (bytes, signal) => {
   active++;
   try {
     return await new Promise<Buffer>((resolve, reject) => {
-      const child = spawn(process.execPath, [worker], {
+      const child = spawn(process.execPath, ["--no-env-file", worker], {
         env: { NODE_ENV: "production", VIPS_CONCURRENCY: "1", MALLOC_ARENA_MAX: "2" },
         stdio: ["pipe", "pipe", "ignore"],
       });
