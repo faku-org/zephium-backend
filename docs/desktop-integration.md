@@ -76,7 +76,7 @@ Use `GET /v1/usage.purchased_balance` for a monetary display: `{currency:"USD",a
 
 ## Staging handoff — 2026-10-21
 
-Use `https://staging-api.zephium.app`. Application source `b829b6080a43ff555aa7b06470fc9d0e99897475` and policy revision **4** are live, with Cloud AI and Polar sandbox billing enabled. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-21).
+Use `https://staging-api.zephium.app`. Application source `c3c0641dd36657d133a17324e39cf2134bc82436` and policy revision **5** are live, with Cloud AI and Polar sandbox billing enabled. The minimum client version is `1.0.0-beta.2`. Signup remains restricted to the owner's approved test addresses; obtain the appropriate test account from the owner. Production remains separate and unqualified. The backend verification and its explicit limits are recorded in [testing.md](testing.md#recorded-evidence--2026-10-21).
 
 | Catalog ID | Roles | Access | Default |
 | --- | --- | --- | --- |
@@ -86,7 +86,17 @@ Use `https://staging-api.zephium.app`. Application source `b829b6080a43ff555aa7b
 
 Read the catalog and its per-model limits instead of hard-coding this table. There is no hosted decision-model default or Max-exclusive frontier row in this staging policy. No Anthropic beta headers are forwarded; this milestone did not live-qualify the other providers.
 
-Staging fixtures: Free has a one-time 250-credit allowance (2,500,000 units) and no renewal or welcome bonus; Pro has 2,000 credits per month (20,000,000 units); Max has 10,000 per month (100,000,000 units). Polar offers are Pro USD20/month, Max USD100/month, and `staging-topup` USD1 for 100 credits (1,000,000 units), expiring after 365 days. Allowance sizes and model tariffs remain provisional fixtures. Existing grants keep their original amounts; this deployment does not refill or resize them. Spend the earliest-expiring eligible grant first. `purchased_balance` now reports an exact USD usage-credit amount under the activated policy. There is no metered overage.
+Staging fixtures: Free has a one-time 250-credit allowance (2,500,000 units) and no renewal or welcome bonus; Pro has 2,000 credits per month (20,000,000 units); Max has 10,000 per month (100,000,000 units). Polar subscription offers are Pro USD20/month and Max USD100/month **plus applicable tax**. The sandbox organization default is now Exclusive; the configured product prices inherit it. The packs below expire after 365 days. Allowance sizes and model tariffs remain provisional fixtures. Existing grants keep their original amounts; this deployment does not refill or resize them. Spend the earliest-expiring eligible grant first. `purchased_balance` now reports an exact USD usage-credit amount under the activated policy. There is no metered overage.
+
+| Top-up ID | Base price, before tax | Credits | Accounting units |
+| --- | --- | --- | --- |
+| `credits-5` | USD5 | 500 | `5000000` |
+| `credits-10` | USD10 | 1,000 | `10000000` |
+| `credits-25` | USD25 | 2,500 | `25000000` |
+| `credits-50` | USD50 | 5,000 | `50000000` |
+| `staging-topup` | USD1 | 100 | `1000000` |
+
+The USD1 pack remains a staging diagnostic fixture. Read current IDs, names, prices and units from billing offers; this table does not authorize hard-coding the picker. Tax charged by Polar does not mint additional credits. Pack creation and live offer projections were verified; new paid checkouts for these four products remain part of the desktop sandbox pass.
 
 Keep these client behaviors in the final UI pass:
 
@@ -124,8 +134,8 @@ The [avatar contract](avatar-contract.md) defines the proposed upload/delete/pri
 
 ## Checkout tax clarification — 2026-10-21
 
-The checked Polish Pro sandbox checkout and paid order had a USD20 total: USD16.26 net plus USD3.74 included tax, with no discount or proration. The product lists USD20 and inherits tax behavior; the effective checkout reported `inclusive`. This result does not establish every country's treatment or a production tax configuration. Display the product offer as its listed price, and let Polar present the final tax breakdown and total. Never add a tax line already included in the total.
+Before the sandbox tax default changed, the checked Polish Pro checkout and paid order had a USD20 total: USD16.26 net plus USD3.74 included tax, with no discount or proration. The product lists USD20 and inherits tax behavior; the effective checkout reported `inclusive`. This result does not establish every country's treatment or a production tax configuration. Display the product offer as its listed price, and let Polar present the final tax breakdown and total. Never add a tax line already included in the total.
 
-The intended production pricing is tax-exclusive: Pro USD20/month and Max USD100/month before applicable tax. This is a commercial decision, not a statement that production or the existing sandbox products have been changed. Label base offers accordingly; Polar determines the final customer-specific tax and total. Tax added at checkout does not increase the quantity of credits purchased.
+The intended production pricing is tax-exclusive: Pro USD20/month and Max USD100/month before applicable tax. This decision is now mirrored by the sandbox Exclusive default; historical orders are unchanged. Production has not been configured. Label base offers accordingly; Polar determines the final customer-specific tax and total. Tax added at checkout does not increase the quantity of credits purchased.
 
-The corrected quote contract returns `amount_due_estimate.tax_excluded:null` and `tax_calculation:"not_calculated"`, including when reading an older stored quote. The estimate uses product amounts and does not perform a customer-specific tax calculation. Show a generic estimate with the final amount determined by Polar; never label it definitively tax-exclusive or add tax locally. The prior `true` value was an incorrect claim, not a billing instruction. Amounts, quote IDs, confirmation semantics and actual Polar charges are unchanged. This correction is prepared in source; staging deployment confirmation follows separately.
+The corrected quote contract returns `amount_due_estimate.tax_excluded:null` and `tax_calculation:"not_calculated"`, including when reading an older stored quote. The estimate uses product amounts and does not perform a customer-specific tax calculation. Show a generic estimate with the final amount determined by Polar; never label it definitively tax-exclusive or add tax locally. The prior `true` value was an incorrect claim, not a billing instruction. Amounts, quote IDs, confirmation semantics and actual Polar charges are unchanged. This correction is live in staging application revision `c3c0641`, with policy 5.
