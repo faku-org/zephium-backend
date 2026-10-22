@@ -81,8 +81,10 @@ const audioModel = {
   contextWindow: 16000,
   maxOutput: 2000,
   maxRequestBytes: audioRequestBytes,
-  maxDurationMs: 500,
-  idleTimeoutMs: 100,
+  // Success cases also use this model; allow CI scheduling/DB latency without
+  // accidentally exercising timeout paths. Deadline tests below keep the ratio.
+  maxDurationMs: 5000,
+  idleTimeoutMs: 1000,
   maxSearchCalls: 0,
   supports: {
     tools: false,
@@ -499,7 +501,11 @@ test("real chunked HTTP upload consumes the same model deadline as transcription
         );
         outgoing.once("error", reject);
         outgoing.write(bytes.subarray(0, 17));
-        setTimeout(() => outgoing.end(bytes.subarray(17)), 450);
+        // Leave less than one idle interval: the whole-request deadline must win.
+        setTimeout(
+          () => outgoing.end(bytes.subarray(17)),
+          audioModel.maxDurationMs - audioModel.idleTimeoutMs / 2,
+        );
       },
     );
     expect(result.status).toBe(504);
@@ -550,7 +556,7 @@ test("catalog publishes transcription defaults, native limits and independent au
   expect(model).toMatchObject({
     roles: ["transcribe"],
     limits: {
-      max_duration_ms: 500,
+      max_duration_ms: audioModel.maxDurationMs,
       max_audio_duration_ms: 240000,
       max_response_bytes: audioResponseBytes,
     },
