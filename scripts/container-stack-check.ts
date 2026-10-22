@@ -217,8 +217,16 @@ try {
     rendered.services.api.environment.CLIENT_MIN_VERSION !== "1.0.0-beta.2" ||
     rendered.services.postgres.command.includes("archive_mode=off") ||
     !rendered.services.postgres.volumes.some(
-      (v: { target: string; read_only: boolean }) =>
-        v.target === "/etc/pgbackrest/pgbackrest.conf" && v.read_only,
+      (v: {
+        source: string;
+        target: string;
+        read_only: boolean;
+        bind?: { create_host_path?: boolean };
+      }) =>
+        v.source === "/etc/zephium/backups/pgbackrest.conf" &&
+        v.target === "/etc/pgbackrest/pgbackrest.conf" &&
+        v.read_only &&
+        v.bind?.create_host_path === false,
     ) ||
     "ZEPHIUM_MIGRATOR_PASSWORD" in rendered.services.api.environment ||
     "POSTGRES_PASSWORD" in rendered.services.api.environment

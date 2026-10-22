@@ -18,7 +18,8 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql
       - type: bind
-        source: ${ZEPHIUM_PGBACKREST_CONFIG_FILE:?Set an absolute path to the private off-server backup configuration}
+        # Coolify validates bind sources before Compose interpolation.
+        source: /etc/zephium/backups/pgbackrest.conf
         target: /etc/pgbackrest/pgbackrest.conf
         read_only: true
         bind:
