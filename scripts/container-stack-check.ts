@@ -210,6 +210,30 @@ try {
       20,
     ),
   );
+  type BackupMount = {
+    type?: string;
+    source?: string;
+    target?: string;
+    read_only?: boolean;
+    bind?: { create_host_path?: boolean };
+  };
+  const productionSource = Bun.YAML.parse(
+    await readFile("deploy/compose.production.yaml", "utf8"),
+  ) as { services: { postgres: { volumes: (string | BackupMount)[] } } };
+  // Older Compose versions omit false-valued fields from JSON output. Require
+  // the explicit fail-closed flag in source and reject true in rendered output.
+  if (
+    !productionSource.services.postgres.volumes.some(
+      (v) =>
+        typeof v !== "string" &&
+        v.type === "bind" &&
+        v.source === "/etc/zephium/backups/pgbackrest.conf" &&
+        v.target === "/etc/pgbackrest/pgbackrest.conf" &&
+        v.read_only === true &&
+        v.bind?.create_host_path === false,
+    )
+  )
+    throw new Error("Production backup mount must fail closed and remain read-only");
   if (
     rendered.services.api.environment.POLAR_ENVIRONMENT !== "production" ||
     rendered.services.api.environment.SIGNUP_EMAIL_ALLOWLIST !== "" ||
@@ -226,7 +250,7 @@ try {
         v.source === "/etc/zephium/backups/pgbackrest.conf" &&
         v.target === "/etc/pgbackrest/pgbackrest.conf" &&
         v.read_only &&
-        v.bind?.create_host_path === false,
+        v.bind?.create_host_path !== true,
     ) ||
     "ZEPHIUM_MIGRATOR_PASSWORD" in rendered.services.api.environment ||
     "POSTGRES_PASSWORD" in rendered.services.api.environment
