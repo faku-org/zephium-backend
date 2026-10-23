@@ -1,4 +1,3 @@
-import { BlockList, isIP } from "node:net";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
@@ -9,24 +8,6 @@ import type { Config } from "../../platform/config";
 import type { Database } from "../../platform/db";
 import { AppError, errorResponse } from "../../platform/errors";
 import { markIncomingStart } from "../../platform/incoming-body";
-export function clientAddress(peer: string, headers: Headers, cidrs: string): string {
-  const allow = new BlockList();
-  for (const entry of cidrs.split(",").filter(Boolean)) {
-    const [address, mask] = entry.split("/");
-    if (!address || !isIP(address)) throw new Error("Invalid proxy CIDR");
-    allow.addSubnet(
-      address,
-      mask ? Number(mask) : isIP(address) === 6 ? 128 : 32,
-      isIP(address) === 6 ? "ipv6" : "ipv4",
-    );
-  }
-  if (isIP(peer) && allow.check(peer, isIP(peer) === 6 ? "ipv6" : "ipv4")) {
-    // Use the rightmost entry: the directly trusted proxy appends the actual peer.
-    const forwarded = headers.get("x-forwarded-for")?.split(",").at(-1)?.trim();
-    if (forwarded && isIP(forwarded)) return forwarded;
-  }
-  return peer;
-}
 export function installHttpMiddleware(
   app: Hono<IdentityEnvironment>,
   config: Config,

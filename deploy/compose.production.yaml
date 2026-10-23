@@ -106,6 +106,7 @@ services:
       API_ORIGIN: ${API_ORIGIN:?Set the public HTTPS API origin}
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:?Set exact trusted HTTPS origins}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?Set the observed trusted reverse-proxy CIDR}
+      TRUSTED_CLOUDFLARE_CIDRS: ${TRUSTED_CLOUDFLARE_CIDRS:-}
       DATABASE_URL: ${ZEPHIUM_APP_DATABASE_URL:?Set the app database URL}
       DB_POOL_SIZE: "8"
       AUTH_SECRET: ${AUTH_SECRET:?Set an independent auth secret}

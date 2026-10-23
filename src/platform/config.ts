@@ -33,6 +33,8 @@ const schema = z.object({
   API_ORIGIN: z.url().default("http://localhost:3000"),
   TRUSTED_ORIGINS: z.string().default("http://localhost:3000"),
   TRUSTED_PROXY_CIDRS: z.string().default(""),
+  // Empty by default: enable only behind an origin route restricted to Cloudflare.
+  TRUSTED_CLOUDFLARE_CIDRS: z.string().default(""),
   DATABASE_URL: z.string().startsWith("postgres"),
   DATABASE_CA_FILE: optionalSecret,
   DB_POOL_SIZE: z.coerce.number().int().min(4).max(30).default(10),

@@ -1,8 +1,9 @@
 import { authenticate } from "../../modules/identity";
-import { clientAddress, installHttpMiddleware } from "./middleware";
+import { createClientAddressResolver } from "../../platform/client-address";
+import { installHttpMiddleware } from "./middleware";
 import { installPublicRoutes } from "./public-routes";
 
-export { clientAddress } from "./middleware";
+export { clientAddress } from "../../platform/client-address";
 
 import { Hono } from "hono";
 import { z } from "zod";
@@ -44,8 +45,12 @@ export function createApp(
 ) {
   const app = new Hono<{ Variables: { identity: Session } }>();
   const billingService = createBillingService(config, db, provider, cloud?.policy ?? null);
+  const resolveClientAddress = createClientAddressResolver(
+    config.TRUSTED_PROXY_CIDRS,
+    config.TRUSTED_CLOUDFLARE_CIDRS,
+  );
   const clientIp = (request: Request) =>
-    clientAddress(peerAddress(request), request.headers, config.TRUSTED_PROXY_CIDRS);
+    resolveClientAddress(peerAddress(request), request.headers);
   installHttpMiddleware(app, config, db, clientIp);
   installPublicRoutes(app, config, db, cloud);
   app.route("/api/auth", createIdentityRoutes(config, db, auth, clientIp));
