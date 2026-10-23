@@ -98,6 +98,10 @@ Identity mail now contains purpose-specific HTML and equivalent plain text for s
 
 Before public launch, choose a transactional sending quota suitable for verified signup and retries, verify DMARC alignment and bounce/suppression handling, confirm representative inbox rendering/autofill, and update the website privacy notice for stored profile images and backup retention. As of the October 21 inspection, the Resend account was on the free 100/day and 3,000/month caps; the existing send key could not retrieve domain tracking settings. This does not establish production email capacity or tracking status.
 
+### Prebuilt images in Coolify 4.4
+
+For the image-only production Compose application, set Custom build command to `true` and leave Custom start command empty. Mark application environment variables runtime-only. Coolify otherwise runs `docker compose build` even though all services use prebuilt images; Compose interpolation then requires runtime-only variables during the unnecessary build phase. The no-op build keeps provider credentials out of that build phase. Normal startup pulls any missing pinned images and injects the runtime environment. Keep automatic and preview deployments disabled for this production resource.
+
 ### Cloudflare in front of the account API
 
 Keep `TRUSTED_PROXY_CIDRS` restricted to the observed Coolify proxy address. For a proxied API hostname, set `TRUSTED_CLOUDFLARE_CIDRS` to the reviewed IPv4 and IPv6 ranges published at https://www.cloudflare.com/ips/ and restrict the production Traefik route to those source ranges. The API accepts `CF-Connecting-IP` only when its socket peer is trusted and the rightmost `X-Forwarded-For` entry appended by Traefik is a Cloudflare address. Never enable insecure forwarded-header trust, suppress Traefik's appended peer, or use a client-supplied leftmost address. Test a forged header through a direct connection and two different visitors through Cloudflare before opening signup. Staging may retain the direct-proxy configuration with the Cloudflare list empty.
