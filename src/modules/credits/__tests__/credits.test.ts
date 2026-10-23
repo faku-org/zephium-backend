@@ -788,3 +788,127 @@ test("customer margin tariffs debit exact sub-credit units independently of prov
     await isolated.close();
   }
 });
+
+test("settlement refunds a long-context hold using snapshotted short-context customer and provider tariffs", async () => {
+  const isolated = await testDatabase();
+  try {
+    const base = testPolicy();
+    const original = required(base.models[0]);
+    const costBase = {
+      input: "1000000",
+      cachedInput: "100000",
+      cacheWrite5m: "1250000",
+      cacheWrite1h: "2000000",
+      output: "5000000",
+      searchCall: "10000",
+    };
+    const costLong = {
+      ...costBase,
+      input: "2000000",
+      cachedInput: "200000",
+      cacheWrite5m: "2500000",
+      cacheWrite1h: "4000000",
+      output: "7500000",
+    };
+    const twice = (rates: typeof costBase) =>
+      Object.fromEntries(
+        Object.entries(rates).map(([key, value]) => [key, (BigInt(value) * 2n).toString()]),
+      ) as typeof costBase;
+    const policy = testPolicy({
+      plans: base.plans.map((plan) => ({
+        ...plan,
+        allowanceUnits: "10000",
+        dailyLimitUnits: null,
+      })),
+      models: [
+        {
+          ...original,
+          rates: {
+            ...twice(costBase),
+            longContext: { inputTokensAbove: 100, rates: twice(costLong) },
+          },
+          costRates: { ...costBase, longContext: { inputTokensAbove: 100, rates: costLong } },
+        },
+      ],
+      limits: {
+        ...base.limits,
+        budgets: {
+          scope: "context-tier-test",
+          dailyUsdMicros: "1000000",
+          totalUsdMicros: "1000000",
+          freeDailyUsdMicros: "1000000",
+        },
+      },
+    });
+    await registerPolicy(isolated.db, policy);
+    const owner = await createCloudAccount(isolated.db);
+    const model = required(policy.models[0]);
+    const request = await openRequest(
+      isolated.db,
+      policy,
+      model,
+      owner.userId,
+      owner.sessionId,
+      crypto.randomUUID(),
+      "/v1/chat/completions",
+    );
+    const customerHold = holdCost(101, 2, 0, model.rates);
+    const providerHold = holdCost(101, 2, 0, required(model.costRates));
+    expect(customerHold).toBe(838n);
+    expect(providerHold).toBe(419n);
+    await reserveRequest(
+      isolated.db,
+      policy,
+      model,
+      request.id,
+      owner.userId,
+      owner.sessionId,
+      customerHold,
+      101,
+      providerHold,
+    );
+    await markDispatched(isolated.db, request.id, owner.userId, owner.sessionId);
+    // Future policy edits must not change either tier in this request's snapshot.
+    await registerPolicy(isolated.db, {
+      ...policy,
+      revision: policy.revision + 1,
+      models: [
+        {
+          ...model,
+          rates: {
+            ...model.rates,
+            input: "20000000",
+            longContext: {
+              inputTokensAbove: 100,
+              rates: { ...twice(costLong), input: "40000000" },
+            },
+          },
+        },
+      ],
+    });
+    await settleRequest(
+      isolated.db,
+      request.id,
+      owner.userId,
+      { ...emptyUsage(), input: 2, output: 1 },
+      200,
+      null,
+    );
+    const [row] = await isolated.db
+      .sql`SELECT charged::text,reserved::text,price_snapshot,cost_rates FROM cloud_request WHERE id=${request.id}`;
+    expect(row).toMatchObject({
+      charged: "14",
+      reserved: "838",
+      price_snapshot: model.rates,
+      cost_rates: model.costRates,
+    });
+    const [budget] = await isolated.db
+      .sql`SELECT exposure::text,terminal FROM cloud_cost_record WHERE request_id=${request.id}`;
+    expect(budget).toEqual({ exposure: "7", terminal: true });
+    const [grant] = await isolated.db
+      .sql`SELECT sum(spent)::text AS spent,sum(held)::text AS held FROM credit_grant WHERE user_id=${owner.userId}`;
+    expect(grant).toEqual({ spent: "14", held: "0" });
+  } finally {
+    await isolated.close();
+  }
+});

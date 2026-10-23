@@ -135,6 +135,15 @@ export function prepareRequest(
         ["file_id", "fileId"].includes(key)
       )
         throw new AppError("provider_storage_not_supported");
+      if (
+        !dataOnly &&
+        model.provider === "openai" &&
+        ["prompt_cache_options", "prompt_cache_breakpoint"].includes(key)
+      ) {
+        const cache = object(value);
+        if (cache.ttl !== undefined && cache.ttl !== "30m")
+          throw new AppError("extended_cache_not_supported");
+      }
       if (!dataOnly && key === "cache_control") {
         const cache = object(value);
         if (
@@ -188,7 +197,8 @@ export function prepareRequest(
   if (model.provider === "openai") {
     if (body.background === true || body.conversation != null || body.previous_response_id != null)
       throw new AppError("provider_storage_not_supported");
-    if (body.prompt_cache_retention === "24h") throw new AppError("extended_cache_not_supported");
+    if (body.prompt_cache_retention !== undefined && body.prompt_cache_retention !== "in_memory")
+      throw new AppError("extended_cache_not_supported");
     body.store = false;
     body.background = false;
     body.service_tier = "default";

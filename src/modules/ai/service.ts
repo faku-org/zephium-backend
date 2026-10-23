@@ -128,6 +128,21 @@ export function createCloudService(
               output: m.rates.output,
               ...(m.rates.audioInput !== undefined ? { audio_input: m.rates.audioInput } : {}),
             },
+            ...(m.rates.longContext
+              ? {
+                  long_context: {
+                    input_tokens_above: m.rates.longContext.inputTokensAbove,
+                    per_million_tokens: {
+                      input: m.rates.longContext.rates.input,
+                      cached_input: m.rates.longContext.rates.cachedInput,
+                      cache_write_5m: m.rates.longContext.rates.cacheWrite5m,
+                      cache_write_1h: m.rates.longContext.rates.cacheWrite1h,
+                      output: m.rates.longContext.rates.output,
+                    },
+                    per_search_call: m.rates.longContext.rates.searchCall,
+                  },
+                }
+              : {}),
             per_search_call: m.rates.searchCall,
             ...(m.rates.audioMinute !== undefined ? { per_audio_minute: m.rates.audioMinute } : {}),
           },

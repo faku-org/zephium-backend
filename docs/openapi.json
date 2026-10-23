@@ -2214,6 +2214,65 @@
                 "type": "string",
                 "const": "10000",
                 "description": "Accounting units per displayed credit; preserve fractional credits and integer ledger amounts."
+              },
+              "long_context": {
+                "type": "object",
+                "properties": {
+                  "input_tokens_above": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2000000
+                  },
+                  "per_million_tokens": {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,14})$",
+                        "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+                      },
+                      "cached_input": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,14})$",
+                        "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+                      },
+                      "cache_write_5m": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,14})$",
+                        "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+                      },
+                      "cache_write_1h": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,14})$",
+                        "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+                      },
+                      "output": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,14})$",
+                        "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "cached_input",
+                      "cache_write_5m",
+                      "cache_write_1h",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "per_search_call": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,14})$",
+                    "description": "Integer accounting units as a decimal string; credit_units is 10000 units per displayed credit"
+                  }
+                },
+                "required": [
+                  "input_tokens_above",
+                  "per_million_tokens",
+                  "per_search_call"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

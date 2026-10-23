@@ -40,8 +40,17 @@ export const emptyUsage = (): Usage => ({
   reasoning: 0,
   searchCalls: 0,
 });
+function contextRates(inputTokens: number, rates: Rates): Rates {
+  return rates.longContext && inputTokens > rates.longContext.inputTokensAbove
+    ? rates.longContext.rates
+    : rates;
+}
 export function charge(usage: Usage, rates: Rates): bigint {
   usageSchema.parse(usage);
+  rates = contextRates(
+    usage.input + usage.cachedInput + usage.cacheWrite5m + usage.cacheWrite1h,
+    rates,
+  );
   if (usage.audioMilliseconds !== undefined) {
     if (rates.audioMinute === undefined) throw new Error("Audio duration tariff is missing");
     return (BigInt(usage.audioMilliseconds) * BigInt(rates.audioMinute) + 59999n) / 60000n;
@@ -56,6 +65,7 @@ export function charge(usage: Usage, rates: Rates): bigint {
   return (millionths + 999999n) / 1000000n + BigInt(usage.searchCalls) * BigInt(rates.searchCall);
 }
 export function holdCost(input: number, output: number, searchCalls: number, rates: Rates): bigint {
+  rates = contextRates(input, rates);
   const maxInput = [rates.input, rates.cachedInput, rates.cacheWrite5m, rates.cacheWrite1h]
     .map(BigInt)
     .reduce((a, b) => (a > b ? a : b));

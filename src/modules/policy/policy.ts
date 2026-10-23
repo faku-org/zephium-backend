@@ -14,7 +14,7 @@ export const providerNames = [
   "typesafe",
 ] as const;
 export type ProviderName = (typeof providerNames)[number];
-export const ratesSchema = z
+const baseRatesSchema = z
   .object({
     input: units,
     cachedInput: units,
@@ -26,6 +26,37 @@ export const ratesSchema = z
     audioMinute: units.optional(),
   })
   .strict();
+export const ratesSchema = baseRatesSchema
+  .extend({
+    longContext: z
+      .object({
+        inputTokensAbove: z.number().int().min(1).max(2_000_000),
+        rates: baseRatesSchema,
+      })
+      .strict()
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.longContext) return;
+    for (const key of [
+      "input",
+      "cachedInput",
+      "cacheWrite5m",
+      "cacheWrite1h",
+      "output",
+      "searchCall",
+    ] as const) {
+      if (BigInt(value.longContext.rates[key]) < BigInt(value[key]))
+        ctx.addIssue({ code: "custom", message: "Long-context rates cannot be below base rates" });
+    }
+    if (
+      value.audioInput !== undefined ||
+      value.audioMinute !== undefined ||
+      value.longContext.rates.audioInput !== undefined ||
+      value.longContext.rates.audioMinute !== undefined
+    )
+      ctx.addIssue({ code: "custom", message: "Audio tariffs do not support context tiers" });
+  });
 const cycle = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("once") }).strict(),
   z.object({ kind: z.literal("fixed_days"), days: z.number().int().min(1).max(366) }).strict(),
