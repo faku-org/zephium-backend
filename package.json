@@ -22,12 +22,12 @@
     "@polar-sh/sdk": "0.49.0",
     "better-auth": "1.7.3",
     "drizzle-orm": "0.45.2",
-    "hono": "4.13.7",
+    "hono": "4.13.11",
     "postgres": "3.4.9",
     "resend": "6.26.0",
     "sharp": "0.35.5",
     "standardwebhooks": "1.1.1",
-    "zod": "4.5.4"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

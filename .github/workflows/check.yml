@@ -14,6 +14,8 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - name: Reject high and critical dependency advisories
+        run: bun audit --audit-level=high
       - run: bun run architecture && bun run typecheck && bun run lint
       - run: bun test --timeout 60000
       - name: Validate disabled deployment policy
