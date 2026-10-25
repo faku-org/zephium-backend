@@ -62,3 +62,10 @@ Measure idle memory, peak memory and CPU during login and representative report 
 Run `bun run admin:build && bun scripts/admin-resource-check.ts`. It starts isolated PostgreSQL and a separate admin process, creates only synthetic data, exercises real password/MFA login and twelve report reads, records process RSS/CPU and request latency, then stops and removes its fixture. Results are written to ignored `.local/admin/resource-result.json`. It does not contact providers or a deployed database.
 
 On 2026-10-25, Bun 1.4.2 on macOS arm64 with 1,000 synthetic users and 5,000 requests measured approximately 82 MiB RSS at readiness and 132.5 MiB process peak, with report requests between 4 and 23 ms. PostgreSQL memory is excluded. This is local qualification, not Linux/container or staging evidence; the proposed 256 MiB container ceiling still requires staging verification.
+
+
+## Verify administrator recovery
+
+`PG_TOOLS=/path/to/postgresql/bin bun scripts/admin-restore-check.ts` performs an isolated logical dump/restore, deletes its source database, and verifies operator records, encrypted MFA state, sessions, audit data, reporting views and effective privileges. It then signs in with the original password/authenticator and a recovery code. The local check passed on 2026-10-25; this does not replace a restore using your deployed backup destination.
+
+Keep `ADMIN_AUTH_SECRET` in independent recovery custody: the database contains encrypted MFA material, not that secret. Logical dumps do not include cluster roles/passwords, so restore their provisioning separately. Physical PostgreSQL backups include the cluster role catalog, but still do not replace the external admin secret.
