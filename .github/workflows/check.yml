@@ -17,6 +17,7 @@ jobs:
       - name: Reject high and critical dependency advisories
         run: bun audit --audit-level=high
       - run: bun run architecture && bun run typecheck && bun run lint
+      - run: bun scripts/build-admin.ts
       - run: bun test --timeout 60000
       - name: Validate disabled deployment policy
         run: bun scripts/cloud-policy.ts validate config/cloud.json && bun scripts/cloud-policy.ts validate config/self-host.json && bun scripts/cloud-policy.ts validate config/staging.json

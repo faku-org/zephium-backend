@@ -1,11 +1,12 @@
 # Architecture
 
-Zephium is a modular monolith: one codebase, one PostgreSQL database, and two runnable applications. The API accepts requests. The worker reconciles billing, exports usage and recovers interrupted work. Business modules are shared by these applications without importing either application.
+Zephium is a modular monolith: one codebase, one PostgreSQL database, and two customer-service applications, plus an optional isolated admin process. The API accepts requests. The worker reconciles billing, exports usage and recovers interrupted work. Business modules are shared by these applications without importing either application.
 
 ## Ownership
 
 | Module | Owns | Public consumers |
 | --- | --- | --- |
+| Admin | Separate operator authentication, read-only reporting projections and audit metadata | Admin process only |
 | Identity | Sign-in, sessions, profiles, account lifecycle, email eligibility | API, billing, credits |
 | Billing | Polar integration, checkout, subscriptions, webhook reconciliation | API, worker |
 | Credits | Grants, holds, settlement, receipts, provider-cost exposure and budget admission | API, worker, AI, billing |
@@ -53,3 +54,6 @@ Domain tests live beside their owner. `tests/integration` covers complete HTTP/a
 Future synchronization, organizations or cloud execution should be added as modules only when their behavior and data model are understood. Define ownership and the smallest public contract first, then add explicit dependencies and tests. End-to-end encrypted sync will require its own ciphertext/key-lifecycle design; this foundation does not implement it or store browser content today.
 
 More machines are an operational decision. This layout supports independently moving API/worker processes and evolving module boundaries, but it does not prove capacity, high availability or live-provider compatibility. Those require staging evidence and production measurements.
+
+
+The optional `apps/admin` process uses its own Better Auth instance, operator tables, secret and host-only cookies. It never accepts customer sessions. Its two connection pools separate auth writes from SELECT-only reporting views; startup verifies effective database privileges. Read-only report transactions do not call grant or billing services. The browser UI is static HTML/CSS plus a small TypeScript bundle, with no framework, analytics or external assets. Admin schema changes have an independent migration ledger in `scripts/admin-migrate.ts`, so qualifying the admin does not deploy unrelated customer API changes.

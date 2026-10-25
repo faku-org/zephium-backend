@@ -30,6 +30,7 @@ For a deployment, start with the [staging setup walkthrough](docs/staging.md). I
 | --- | --- |
 | `src/apps/api` | HTTP application and API process |
 | `src/apps/worker` | Background reconciliation and recovery process |
+| `src/apps/admin`, `src/modules/admin` | Optional isolated read-only admin console and operator authentication |
 | `src/modules/identity` | Email-code sign-in, sessions, account actions and enrollment |
 | `src/modules/billing` | Polar products, checkout, subscriptions, refunds and reconciliation |
 | `src/modules/credits` | Grants, reservations, settlement and spending exposure |
@@ -39,10 +40,11 @@ For a deployment, start with the [staging setup walkthrough](docs/staging.md). I
 | `tests/support`, `tests/integration` | Shared fixtures and integration coverage |
 | `config`, `migrations`, `deploy` | Reviewed policy, database changes and deployment files |
 
-The API and worker are separate processes backed by PostgreSQL. Only the API has public ingress. Runtime processes check the active policy; operators explicitly register a reviewed revision during deployment.
+The API and worker are separate processes backed by PostgreSQL. Only the API has customer ingress; the optional admin console uses a separate restricted origin. Runtime processes check the active policy; operators explicitly register a reviewed revision during deployment.
 
 ## Documentation
 
+- [Admin console](docs/admin.md): optional self-hosted user, usage and billing visibility with separate operator MFA and restricted database roles.
 - [Architecture](docs/architecture.md): domain ownership and enforced dependency boundaries.
 - [Staging setup](docs/staging.md): owner steps, configuration and first test.
 - [Operations](docs/operations.md): updates, monitoring, backup and recovery.

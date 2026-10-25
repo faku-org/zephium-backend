@@ -26,7 +26,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           repository="ghcr.io/${REPOSITORY,,}"
-          for target in account worker; do
+          for target in account worker admin; do
             image="$repository/$target:$GITHUB_SHA-$GITHUB_RUN_ID"
             docker build --build-arg "SOURCE_URL=https://github.com/$REPOSITORY/tree/$GITHUB_SHA" --target "$target" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$image" .
             docker push "$image"

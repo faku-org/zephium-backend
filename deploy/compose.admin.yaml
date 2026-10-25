@@ -1,0 +1,63 @@
+# Optional, separate Compose project. Never merge this into the customer API stack.
+# Supply a private env file; only the explicitly selected operation receives migrator access.
+services:
+  admin:
+    image: ${ADMIN_IMAGE:?Set the reviewed admin image digest built with --target admin}
+    restart: unless-stopped
+    user: bun
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=16m,mode=1777
+    expose: ["3001"]
+    environment:
+      ADMIN_PORT: "3001"
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN:?Set the separate exact HTTPS admin origin}
+      ADMIN_AUTH_SECRET: ${ADMIN_AUTH_SECRET:?Set an independent admin secret of at least 48 characters}
+      ADMIN_AUTH_DATABASE_URL: ${ADMIN_AUTH_DATABASE_URL:?Set the restricted admin authentication role URL}
+      ADMIN_READ_DATABASE_URL: ${ADMIN_READ_DATABASE_URL:?Set the separate SELECT-only reporting role URL}
+      ADMIN_TRUSTED_PROXY_CIDRS: ${ADMIN_TRUSTED_PROXY_CIDRS:-}
+      ADMIN_TRUSTED_CLOUDFLARE_CIDRS: ${ADMIN_TRUSTED_CLOUDFLARE_CIDRS:-}
+    networks: [database, proxy]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    stop_grace_period: 30s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - 'const origin=new URL(process.env.ADMIN_ORIGIN);const r=await fetch("http://127.0.0.1:3001/health/ready",{headers:{host:origin.host}});process.exit(r.ok?0:1)'
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  admin-migrate:
+    image: ${ADMIN_IMAGE:?Set the reviewed admin image digest built with --target admin}
+    profiles: [operations]
+    restart: "no"
+    user: bun
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=16m,mode=1777
+    environment:
+      # Compose expands inactive profiles too. The script refuses a blank URL only when run.
+      ADMIN_MIGRATOR_DATABASE_URL: ${ADMIN_MIGRATOR_DATABASE_URL:-}
+    command: [bun, scripts/admin-migrate.ts]
+    networks: [database]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+networks:
+  database:
+    external: true
+    name: ${ADMIN_DATABASE_NETWORK:?Set the existing staging PostgreSQL network name}
+  proxy:
+    external: true
+    name: ${ADMIN_PROXY_NETWORK:?Set the existing staging reverse-proxy network name}
