@@ -11,6 +11,7 @@ export {
   markWelcomeClaimed,
   setFreeAnchor,
 } from "./grant-eligibility";
+export { assertGrantEligibilityReady } from "./grant-mailboxes";
 export {
   cleanupExpiredActionCodes,
   cleanupExpiredAuthCodes,

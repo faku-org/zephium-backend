@@ -34,6 +34,45 @@ export const emailEligibilityAlias = pgTable(
   (t) => [index("email_eligibility_alias_canonical_idx").on(t.canonicalKey)],
 );
 
+// Grant-only mailbox grouping never changes identity or ownership.
+export const grantEligibilityGroup = pgTable("grant_eligibility_group", {
+  key: text("key").primaryKey(),
+  welcomeClaimedAt: time("welcome_claimed_at"),
+  signupClaimedAt: time("signup_claimed_at"),
+  freeAnchor: time("free_anchor"),
+  freePeriodEnd: time("free_period_end"),
+});
+export const grantEligibilityMember = pgTable(
+  "grant_eligibility_member",
+  {
+    identityKey: text("identity_key")
+      .primaryKey()
+      .references(() => emailEligibility.key),
+    groupKey: text("group_key")
+      .notNull()
+      .references(() => grantEligibilityGroup.key),
+  },
+  (t) => [index("grant_eligibility_member_group_idx").on(t.groupKey)],
+);
+export const grantEligibilityMailbox = pgTable(
+  "grant_eligibility_mailbox",
+  {
+    mailboxKey: text("mailbox_key").primaryKey(),
+    groupKey: text("group_key")
+      .notNull()
+      .references(() => grantEligibilityGroup.key),
+  },
+  (t) => [index("grant_eligibility_mailbox_group_idx").on(t.groupKey)],
+);
+export const grantEligibilityMigration = pgTable(
+  "grant_eligibility_migration",
+  {
+    version: integer("version").primaryKey(),
+    complete: boolean("complete").notNull(),
+  },
+  (t) => [check("grant_eligibility_migration_version_check", sql`${t.version} = 1`)],
+);
+
 export const user = pgTable("auth_user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

@@ -16,6 +16,8 @@ const schema = z.object({
         .filter((entry) => entry.trim() !== "")
         .every((entry) => z.email().max(254).safeParse(entry.trim().toLowerCase()).success),
     ),
+  OTP_SENDS_PER_NETWORK_PER_15_MIN: z.coerce.number().int().min(3).max(10000).default(30),
+  EMAIL_SENDS_PER_MINUTE: z.coerce.number().int().min(1).max(60000).default(300),
   EMAIL_MAX_IN_FLIGHT: z.coerce.number().int().min(1).max(16).default(16),
   SIGNUP_PER_IP_PER_DAY: z.coerce.number().int().min(1).max(10000).default(3),
   ELIGIBILITY_SECRET: z.string().min(32).optional(),

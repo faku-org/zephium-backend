@@ -80,7 +80,13 @@ export async function accountContext(
   if (plan.cycle.kind === "once") {
     const [existing] =
       await tx`SELECT * FROM credit_grant WHERE user_id=${userId} AND grant_key=${`signup:${plan.id}`}`;
-    if (policy.enabled && !readOnly && !existing && !eligibility?.signup_claimed_at) {
+    const sharedSignup = plan.id === policy.freePlan;
+    if (
+      policy.enabled &&
+      !readOnly &&
+      !existing &&
+      (!sharedSignup || !eligibility?.signup_claimed_at)
+    ) {
       await grant(
         tx,
         userId,
@@ -92,7 +98,7 @@ export async function accountContext(
         null,
         now,
       );
-      if (eligibility) await markSignupClaimed(tx, account.eligibility_key, now);
+      if (sharedSignup && eligibility) await markSignupClaimed(tx, account.eligibility_key, now);
     }
     return {
       plan,

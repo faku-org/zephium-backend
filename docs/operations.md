@@ -56,6 +56,8 @@ The API retains account, billing, policy, grant and usage records. It also retai
 
 `SIGNUP_OPEN=false` stops new account creation; existing allowed users can still sign in. `SIGNUP_EMAIL_ALLOWLIST` restricts sign-in and email-change destinations to exact comma-separated addresses; an empty value permits all addresses. Case/whitespace are normalized, plus aliases remain distinct, and deletion remains available. Keep staging on an explicit list.
 
+Sign-in code requests are limited before account lookup to `OTP_SENDS_PER_NETWORK_PER_15_MIN` (default 30 per 15 minutes). IPv4 addresses are individual buckets; IPv6 privacy addresses share a /64 bucket. Equivalent IPv6 spellings and IPv4-mapped addresses cannot create separate buckets. Only keyed hashes are stored. This is temporary send throttling, not an identity or trial-grant decision; existing sign-in codes can still be redeemed. All sign-in, deletion and email-change code requests also share `EMAIL_SENDS_PER_MINUTE` (default 300) across API replicas, including deliberately suppressed sends so saturation cannot disclose account existence. Rejected attempts return `429 rate_limited` with `Retry-After`; failed provider deliveries consume capacity and are not automatically retried. These limits bound send velocity, not the monthly email invoice; monitor Resend quota separately and tune for legitimate shared-network traffic.
+
 Email delivery is awaited and bounded by `EMAIL_MAX_IN_FLIGHT` (1–16). Delivery failure or saturation returns `503 email_unavailable` with retry guidance; provider throttling shares a cooldown across sign-in and account-action mail. There is no plaintext-code queue or automatic resend. Generic accepted responses also cover deliberately suppressed sends, so verify inbox receipt. Rotating `AUTH_SECRET` invalidates outstanding codes and sessions; preserve the independent eligibility secret unless carrying out a reviewed migration.
 
 For client behavior, use the durable [desktop contract](desktop-integration.md). Public client config is cached for five minutes; server-side gates remain authoritative. Minimum client version is advisory.
@@ -109,3 +111,11 @@ Keep `TRUSTED_PROXY_CIDRS` restricted to the observed Coolify proxy address. For
 Use Full (strict) TLS, bypass API caching, avoid browser challenges for native clients and signed webhooks, and qualify streaming through the full path. Cloudflare terminates TLS and must be covered by the service privacy description. An orange-cloud record alone does not block direct-origin traffic; the staging hostname shares the server IP. Scope origin restrictions to the production API route so existing website, staging, ACME and Coolify access remain intact.
 
 In Coolify 4.4, mark the existing pgBackRest configuration mount as host-managed. Its storage writer must not recreate or chmod this secret file. Verify mode `0600`, PostgreSQL ownership, and the read-only mount after Compose reload and deployment.
+
+
+Worker alert categories (billing jobs, contact updates, spending thresholds) have
+independent one-hour reminder cooldowns. New failures alert immediately; recoveries
+send once after a delivered failure alert. Failed deliveries retry at the next
+health scan, and a failed category does not suppress the others. This delivery
+state is process-local, so a restart can repeat an active alert. A failed spending
+check is not treated as a recovery.

@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { isIP } from "node:net";
 import { Hono } from "hono";
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
@@ -7,8 +6,10 @@ import { enforce, privateKey, retryAfterSeconds } from "../../platform/abuse";
 import type { Config } from "../../platform/config";
 import type { Database } from "../../platform/db";
 import { AppError, errorResponse, operationalEvent } from "../../platform/errors";
+import { canonicalIp } from "../../platform/ip-bucket";
 import type { Auth } from "./auth";
 import { eligibilitySecret, normalizeEmail, resolveEligibilityKey } from "./eligibility";
+import { admitEmailSend, limitSignInSend } from "./email-limits";
 import { signupEmailAllowed } from "./policy";
 
 const email = z.string().transform(normalizeEmail);
@@ -143,8 +144,7 @@ export function createIdentityRoutes(
     return true;
   }
   async function admitNewAccount(tx: TransactionSql, request: Request) {
-    const ip = clientIp?.(request) ?? "127.0.0.1";
-    if (!isIP(ip)) throw new AppError("unavailable", 503);
+    const ip = canonicalIp(clientIp?.(request) ?? "127.0.0.1");
     const [clock] = await tx`SELECT clock_timestamp() AS db_now`;
     const now = new Date(clock?.db_now);
     const day = now.toISOString().slice(0, 10);
@@ -161,7 +161,9 @@ export function createIdentityRoutes(
 
   app.post("/email-otp/send-verification-otp", async (c) => {
     const body = await parse(c, sendBody);
+    await limitSignInSend(config, db, clientIp?.(c.req.raw) ?? "127.0.0.1");
     await limitSend(body.email);
+    await admitEmailSend(config, db);
     return withEmailLock(body.email, async (_tx, user) => {
       if (
         !signupEmailAllowed(config, body.email) ||
@@ -218,6 +220,8 @@ export function createIdentityRoutes(
       };
       if (typeof result.token !== "string" || typeof result.user?.id !== "string")
         throw new AppError("unavailable", 503);
+      // Account locks precede the shared mailbox-eligibility fence.
+      await tx`SELECT id FROM auth_user WHERE id=${result.user.id} FOR UPDATE`;
       const key = await resolveEligibilityKey(tx, eligibilitySecretValue, body.email);
       await tx`UPDATE auth_user SET eligibility_key=coalesce(eligibility_key,${key})
           WHERE id=${result.user.id} AND email=${body.email}`;

@@ -8,6 +8,7 @@ import type { Config } from "../../platform/config";
 import type { Database } from "../../platform/db";
 import { AppError, errorResponse } from "../../platform/errors";
 import { markIncomingStart } from "../../platform/incoming-body";
+import { canonicalIp } from "../../platform/ip-bucket";
 export function installHttpMiddleware(
   app: Hono<IdentityEnvironment>,
   config: Config,
@@ -61,7 +62,12 @@ export function installHttpMiddleware(
     if (!["GET", "HEAD"].includes(c.req.method) && c.req.header("cookie") && !origin)
       throw new AppError("origin_required", 403);
     if (c.req.path.startsWith("/api/auth/"))
-      await enforce(db, privateKey(config.ABUSE_SECRET, "auth-ip", clientIp(c.req.raw)), 60, 120);
+      await enforce(
+        db,
+        privateKey(config.ABUSE_SECRET, "auth-ip", canonicalIp(clientIp(c.req.raw))),
+        60,
+        120,
+      );
     await next();
   });
 }

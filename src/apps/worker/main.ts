@@ -13,6 +13,7 @@ import { readWorkerConfig } from "../../platform/config";
 import { createDatabase } from "../../platform/db";
 import { operationalEvent } from "../../platform/errors";
 import { sendOperationalNotification } from "../../platform/notifications";
+import { WorkerAlerts } from "./alerts";
 
 const config = readWorkerConfig();
 const db = createDatabase(config);
@@ -36,7 +37,13 @@ const ranks = Object.fromEntries(
 let stopped = false;
 let lastCleanup = 0;
 let lastHealth = 0;
-let lastAlert = 0;
+const operationsWebhook = config.OPERATIONS_WEBHOOK;
+const alerts = operationsWebhook
+  ? new WorkerAlerts(
+      (message) => sendOperationalNotification(operationsWebhook, message),
+      () => operationalEvent("worker_alert_delivery_failed"),
+    )
+  : undefined;
 let lastRecovery = 0;
 if (
   config.NODE_ENV === "production" &&
@@ -66,21 +73,15 @@ try {
         await writeFile("/tmp/zephium-worker-health.tmp", JSON.stringify(health), { mode: 0o600 });
         await rename("/tmp/zephium-worker-health.tmp", "/tmp/zephium-worker-health.json");
         lastHealth = Date.now();
-        const budgetWarning = await budgetNearLimit(db, policy);
-        if (
-          (status?.exhausted || status?.contact_exhausted || budgetWarning) &&
-          config.OPERATIONS_WEBHOOK &&
-          Date.now() - lastAlert > 3600_000
-        ) {
-          await sendOperationalNotification(
-            config.OPERATIONS_WEBHOOK,
-            status?.exhausted
-              ? "Zephium billing work requires operator attention"
-              : status?.contact_exhausted
-                ? "Zephium billing contact update requires operator attention"
-                : "Zephium cloud spending is near a configured safety limit",
-          );
-          lastAlert = Date.now();
+        await alerts?.scan({
+          billing: Boolean(status?.exhausted),
+          contact: Boolean(status?.contact_exhausted),
+        });
+        try {
+          const budgetWarning = await budgetNearLimit(db, policy);
+          await alerts?.scan({ budget: budgetWarning });
+        } catch {
+          operationalEvent("worker_budget_check_failed");
         }
       }
       if (Date.now() - lastCleanup > 3600_000) {

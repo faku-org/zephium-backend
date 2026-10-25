@@ -6,7 +6,9 @@ import type { Database } from "../../platform/db";
 import { AppError, operationalEvent } from "../../platform/errors";
 import type { Mailer } from "./auth";
 import type { AccountMutationHooks } from "./contracts";
-import { eligibilityKey, eligibilitySecret, normalizeEmail } from "./eligibility";
+import { eligibilityKey, eligibilitySecret, grantMailboxKey, normalizeEmail } from "./eligibility";
+import { admitEmailSend } from "./email-limits";
+import { bindGrantMailbox, lockGrantGrouping } from "./grant-mailboxes";
 import { signupEmailAllowed } from "./policy";
 import { assertMutationSession } from "./session";
 
@@ -65,6 +67,7 @@ export async function requestActionCode(
 ): Promise<void> {
   await enforce(db, ownerLimitKey(config, input, "send"), 900, 3);
   await enforce(db, ownerLimitKey(config, input, "cooldown"), 60, 1);
+  await admitEmailSend(config, db);
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const address = await db.sql.begin(async (tx) => {
     await authorization?.beforeAccountMutation(tx, input.userId);
@@ -111,6 +114,7 @@ async function associateDestination(
   originalKey: string | null,
   newEmail: string,
 ) {
+  await lockGrantGrouping(tx);
   const secret = eligibilitySecret(config);
   const sourceKey = originalKey ?? eligibilityKey(secret, originalEmail);
   const target = eligibilityKey(secret, newEmail);
@@ -121,6 +125,7 @@ async function associateDestination(
   const [prior] = await tx`SELECT welcome_claimed_at,signup_claimed_at,free_anchor,free_period_end
     FROM email_eligibility WHERE key=${source} FOR UPDATE`;
   if (!prior) throw new AppError("unavailable", 503);
+  await bindGrantMailbox(tx, source, grantMailboxKey(secret, originalEmail));
   if (target === source) return;
   await tx`INSERT INTO email_eligibility(key) VALUES (${target}) ON CONFLICT DO NOTHING`;
   const [existingAlias] =
@@ -148,6 +153,7 @@ async function associateDestination(
     WHERE key=${target}`;
   await tx`INSERT INTO email_eligibility_alias(alias_key,canonical_key) VALUES (${target},${source})
     ON CONFLICT(alias_key) DO NOTHING`;
+  await bindGrantMailbox(tx, source, grantMailboxKey(secret, newEmail));
 }
 
 /** Successful consume and effect commit together; bad attempts commit before the 401. */

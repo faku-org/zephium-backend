@@ -4,6 +4,9 @@ import { join, resolve } from "node:path";
 import sharp from "sharp";
 import { applyTopup } from "../src/modules/credits/grants";
 import { processAvatar } from "../src/modules/identity/avatars/processor";
+import { eligibilitySecret, grantMailboxKey } from "../src/modules/identity/eligibility";
+import { lockGrantEligibility } from "../src/modules/identity/grant-eligibility";
+import { bindGrantMailbox, lockGrantGrouping } from "../src/modules/identity/grant-mailboxes";
 import { createDatabase, type Database } from "../src/platform/db";
 import { testPolicy } from "../tests/support/cloud-fixture";
 import { testDatabase } from "../tests/support/database";
@@ -41,6 +44,10 @@ async function snapshot(db: Database, userId: string) {
       await db.sql`SELECT user_id,version,encode(content,'hex') AS content_hex,sha256,width,height,updated_at FROM account_avatar WHERE user_id=${userId}`,
     eligibility: await db.sql`SELECT * FROM email_eligibility ORDER BY key`,
     aliases: await db.sql`SELECT * FROM email_eligibility_alias ORDER BY alias_key`,
+    grantGroups: await db.sql`SELECT * FROM grant_eligibility_group ORDER BY key`,
+    grantMembers: await db.sql`SELECT * FROM grant_eligibility_member ORDER BY identity_key`,
+    grantMailboxes: await db.sql`SELECT * FROM grant_eligibility_mailbox ORDER BY mailbox_key`,
+    grantMigration: await db.sql`SELECT * FROM grant_eligibility_migration ORDER BY version`,
     actions: await db.sql`SELECT * FROM action_otp WHERE owner_user_id=${userId}`,
     checkouts: await db.sql`SELECT * FROM billing_checkout WHERE user_id=${userId}`,
     reversals:
@@ -132,6 +139,22 @@ try {
   await fixture.db
     .sql`INSERT INTO auth_user(id,name,email,email_verified) VALUES (${deletedUserId},'Deleted restore fixture','deleted-restore@example.test',true)`;
   await fixture.db.sql`INSERT INTO credit_wallet(user_id) VALUES (${deletedUserId})`;
+  await fixture.db.sql.begin(async (tx) => {
+    await tx`SELECT id FROM auth_user WHERE id=${deletedUserId} FOR UPDATE`;
+    await lockGrantGrouping(tx);
+    await bindGrantMailbox(
+      tx,
+      "restore-email",
+      grantMailboxKey(eligibilitySecret(fixture.config), "restore@gmail.com"),
+    );
+    await tx`INSERT INTO email_eligibility(key,signup_claimed_at) VALUES ('restore-deleted',clock_timestamp())`;
+    await bindGrantMailbox(
+      tx,
+      "restore-deleted",
+      grantMailboxKey(eligibilitySecret(fixture.config), "restoredeleted@gmail.com"),
+    );
+    await tx`UPDATE auth_user SET eligibility_key='restore-deleted' WHERE id=${deletedUserId}`;
+  });
   await fixture.db
     .sql`INSERT INTO cloud_request(id,user_id,session_id,client_key,provider,model_id,route,policy_revision,price_snapshot,state,reserved,dispatched_at,lease_until,hold_until)
       VALUES (${unknownId},${deletedUserId},'deleted-restore-session','restore-unknown','openai','restore-model','/v1/responses',${policyRevision},${price}::jsonb,'usage_unknown',350000,now(),now(),now())`;
@@ -155,6 +178,11 @@ try {
     encode(before.migrations.map((row) => row.name)) !==
       encode((await readdir("migrations")).filter((name) => /^\d+_.+\.sql$/.test(name)).sort()) ||
     before.migrations.some((row) => !/^[a-f0-9]{64}$/.test(String(row.digest))) ||
+    before.grantGroups.length !== 2 ||
+    before.grantMembers.length !== 2 ||
+    before.grantMailboxes.length !== 2 ||
+    before.grantMigration[0]?.complete !== true ||
+    !before.grantGroups.some((row) => row.key === "restore-deleted" && row.signup_claimed_at) ||
     before.grants.length !== 1 ||
     String(before.grants[0]?.spent) !== "125000" ||
     String(before.grants[0]?.held) !== "250000" ||
@@ -207,6 +235,11 @@ try {
     const after = await snapshot(restored, id);
     if (encode(after) !== encode(before))
       throw new Error("Restored account, cloud accounting, or migration records differ");
+    const deletedEligibility = await restored.sql.begin((tx) =>
+      lockGrantEligibility(tx, "restore-deleted"),
+    );
+    if (!deletedEligibility?.signup_claimed_at)
+      throw new Error("Restored deleted-account grant eligibility is missing");
     await applyTopup(restored, policy, {
       id: "restore-refunded-before-paid",
       userId: id,
