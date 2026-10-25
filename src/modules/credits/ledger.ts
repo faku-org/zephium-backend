@@ -13,6 +13,24 @@ const available = (grants: Record<string, unknown>[]) =>
     (n, g) => n + BigInt(String(g.amount)) - BigInt(String(g.spent)) - BigInt(String(g.held)),
     0n,
   );
+/** Wallet/grant locks must already be held. A temporary hold is not exhaustion. */
+async function requireCredit(
+  tx: Tx,
+  userId: string,
+  grants: Record<string, unknown>[],
+  cost: bigint,
+) {
+  const spendable = available(grants);
+  if (spendable >= cost) return;
+  const held = grants.reduce((sum, grant) => sum + BigInt(String(grant.held)), 0n);
+  if (held > 0n && spendable + held >= cost) {
+    const [clock] = await tx`SELECT greatest(1,least(60,ceil(extract(epoch FROM
+      min(CASE WHEN state='usage_unknown' THEN hold_until ELSE lease_until END)-clock_timestamp()))))::integer AS retry
+      FROM cloud_request WHERE user_id=${userId} AND state IN ('reserved','running','usage_unknown')`;
+    throw new AppError("credit_reservation_pending", 429, Number(clock?.retry ?? 30));
+  }
+  throw new AppError("insufficient_credits", 402);
+}
 async function bucket(
   tx: Tx,
   policy: CloudPolicy,
@@ -71,8 +89,7 @@ export async function openRequest(
         liveStates.includes(old.state) ? "request_in_progress" : "request_already_recorded",
         409,
       );
-    if (available(await availableGrants(tx, userId, context.plan.id)) <= 0n)
-      throw new AppError("insufficient_credits", 402);
+    await requireCredit(tx, userId, await availableGrants(tx, userId, context.plan.id), 1n);
     const key = createHash("sha256").update(`cloud-rpm:${userId}`).digest("hex");
     const [rate] =
       await tx`INSERT INTO abuse_bucket(key,count,expires_at) VALUES (${key},1,clock_timestamp()+interval '1 minute') ON CONFLICT(key) DO UPDATE SET count=CASE WHEN abuse_bucket.expires_at<=clock_timestamp() THEN 1 ELSE abuse_bucket.count+1 END,expires_at=CASE WHEN abuse_bucket.expires_at<=clock_timestamp() THEN clock_timestamp()+interval '1 minute' ELSE abuse_bucket.expires_at END RETURNING count,expires_at`;
@@ -138,7 +155,7 @@ export async function reserveRequest(
     if (request?.state !== "preflight" || new Date(request.lease_until) <= ctx.now)
       throw new AppError("request_expired", 409);
     const grants = await availableGrants(tx, userId, ctx.plan.id);
-    if (available(grants) < cost) throw new AppError("insufficient_credits", 402);
+    await requireCredit(tx, userId, grants, cost);
     await bucket(tx, p, m.provider, inputTokens, false);
     // Provider bucket locking can cross a grant, subscription, or request expiry.
     const [clock] = await tx`SELECT clock_timestamp() AS db_now`;
@@ -156,7 +173,7 @@ export async function reserveRequest(
     let validGrants = grants.filter(
       (g) => !g.revoked && (!g.expires_at || new Date(g.expires_at) > fresh),
     );
-    if (available(validGrants) < cost) throw new AppError("insufficient_credits", 402);
+    await requireCredit(tx, userId, validGrants, cost);
     if (p.limits.budgets) {
       if (
         providerCost === undefined ||

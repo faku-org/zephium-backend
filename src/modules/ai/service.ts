@@ -15,6 +15,7 @@ import {
 } from "../credits";
 import { type CloudPolicy, findModel, type ProviderName, requestDuration } from "../policy";
 import { audioDeadlineMs, audioResponseBytes, createAudioTranscriber } from "./audio";
+import { customerInputTokens } from "./image-reservation";
 import { object, prepareRequest } from "./protocol";
 import { reserveInput } from "./reservation";
 import { SseFrames } from "./sse";
@@ -273,12 +274,19 @@ export function createCloudService(
         requestId = opened.id;
         // Local estimates reserve credit; only provider-reported usage determines the debit.
         const bound = reserveInput(model, prepared);
+        const customerInput = await customerInputTokens(
+          model,
+          prepared,
+          bound,
+          transport,
+          abort.signal,
+        );
         const outputBound =
           provider === "google"
             ? Math.min(model.contextWindow, prepared.outputLimit * 2)
             : prepared.outputLimit;
         const reserved = holdCost(
-          bound.inputTokens + bound.searchInputTokens,
+          customerInput + bound.searchInputTokens,
           outputBound,
           prepared.searchCalls,
           model.rates,

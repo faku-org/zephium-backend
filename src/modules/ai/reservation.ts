@@ -6,6 +6,7 @@ import type { PreparedRequest } from "./protocol";
 export interface InputReservation {
   inputTokens: number;
   searchInputTokens: number;
+  countImages: boolean;
 }
 
 const textFactors: Partial<Record<ProviderName, number>> = {
@@ -149,5 +150,6 @@ export function reserveInput(model: Model, prepared: PreparedRequest): InputRese
   return {
     inputTokens,
     searchInputTokens: prepared.searchCalls * model.contextWindow,
+    countImages: kind === "image" && ["openai", "anthropic", "google"].includes(model.provider),
   };
 }

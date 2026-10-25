@@ -158,11 +158,30 @@ test("parallel reservations cannot both spend the same balance", async () => {
       reserveRequest(fixture.db, ctx.policy, ctx.model, r.id, ctx.userId, ctx.sessionId, 80n, 1),
     ),
   );
-  expect(results.map(codeOf).sort()).toEqual(["insufficient_credits", "ok"]);
+  expect(results.map(codeOf).sort()).toEqual(["credit_reservation_pending", "ok"]);
   expect((await grants(ctx.userId)).reduce((sum, g) => sum + BigInt(g.held), 0n)).toBe(80n);
   await Promise.all(
     [first, second].map((r) => releaseRequest(fixture.db, r.id, ctx.userId, "test_cleanup")),
   );
+});
+
+test("held credit returns retryable admission and becomes spendable after release", async () => {
+  const ctx = await setup();
+  const a = await opened(ctx);
+  const b = await opened(ctx);
+  await reserveRequest(fixture.db, ctx.policy, ctx.model, a.id, ctx.userId, ctx.sessionId, 120n, 1);
+  await expect(
+    reserveRequest(fixture.db, ctx.policy, ctx.model, b.id, ctx.userId, ctx.sessionId, 1n, 1),
+  ).rejects.toMatchObject({ code: "credit_reservation_pending", status: 429 });
+  await expect(opened(ctx)).rejects.toMatchObject({
+    code: "credit_reservation_pending",
+    status: 429,
+  });
+  await releaseRequest(fixture.db, a.id, ctx.userId, "test_cleanup");
+  await reserveRequest(fixture.db, ctx.policy, ctx.model, b.id, ctx.userId, ctx.sessionId, 120n, 1);
+  await markDispatched(fixture.db, b.id, ctx.userId, ctx.sessionId);
+  await settleRequest(fixture.db, b.id, ctx.userId, { ...emptyUsage(), input: 120 }, 200, null);
+  await expect(opened(ctx)).rejects.toMatchObject({ code: "insufficient_credits", status: 402 });
 });
 
 test("a duplicate client key cannot open a second dispatch", async () => {

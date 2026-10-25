@@ -28,6 +28,7 @@ export async function boundedJSON(
     void reader.cancel().catch(() => {});
   };
   signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
   const chunks: Uint8Array[] = [];
   let length = 0;
   try {
@@ -54,7 +55,12 @@ export async function boundedJSON(
     throw new AppError("invalid_provider_response", 502);
   }
 }
-export function nativeTransport(keys: Partial<Record<ProviderName, string>>): CloudTransport {
+export type FetchRequest = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+export function nativeTransport(
+  keys: Partial<Record<ProviderName, string>>,
+  fetcher: FetchRequest = fetch,
+): CloudTransport {
   const headers = (provider: ProviderName) => {
     const key = keys[provider];
     if (!key) throw new AppError("provider_not_configured", 503);
@@ -67,7 +73,7 @@ export function nativeTransport(keys: Partial<Record<ProviderName, string>>): Cl
     return h;
   };
   const send = (m: Model, path: string, body: unknown, signal: AbortSignal) =>
-    fetch(`${origins[m.provider]}${path}`, {
+    fetcher(`${origins[m.provider]}${path}`, {
       method: "POST",
       headers: headers(m.provider),
       body: JSON.stringify(body),
@@ -119,14 +125,19 @@ export function nativeTransport(keys: Partial<Record<ProviderName, string>>): Cl
         );
       } else return m.contextWindow; // Safe, disclosed ceiling where no native counting endpoint is used.
       if (!response.ok) {
+        const retry = Number(response.headers.get("Retry-After"));
         await response.body?.cancel();
+        if ([400, 413, 422].includes(response.status))
+          throw new AppError("provider_rejected", response.status);
         throw new AppError(
           response.status === 429 ? "provider_rate_limited" : "token_count_unavailable",
-          response.status === 429 ? 429 : 502,
-          response.status === 429 ? 1 : undefined,
+          response.status === 429 ? 429 : 503,
+          Number.isFinite(retry) && retry > 0 ? Math.min(900, Math.ceil(retry)) : 30,
         );
       }
-      const { value } = await boundedJSON(response, 65536);
+      const { value } = await boundedJSON(response, 65536, undefined, signal);
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new AppError("invalid_provider_response", 502);
       const data = value as Record<string, unknown>;
       const count = m.provider === "google" ? data.totalTokens : data.input_tokens;
       if (
@@ -147,7 +158,7 @@ export function nativeTransport(keys: Partial<Record<ProviderName, string>>): Cl
       if (r.language) body.set("language", r.language);
       const h = headers(m.provider);
       h.delete("Content-Type"); // Fetch supplies the boundary for this new, normalized multipart body.
-      return fetch(`${origins.openai}/v1/audio/transcriptions`, {
+      return fetcher(`${origins.openai}/v1/audio/transcriptions`, {
         method: "POST",
         headers: h,
         body,
