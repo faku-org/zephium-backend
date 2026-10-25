@@ -83,8 +83,20 @@ export async function openRequest(
     const context = await accountContext(tx, userId, p, sessionId);
     if (!m.plans.includes(context.plan.id)) throw new AppError("plan_required", 403);
     const [old] =
-      await tx`SELECT state FROM cloud_request WHERE user_id=${userId} AND client_key=${clientKey}`;
-    if (old)
+      await tx`SELECT id,state,error_class,dispatched_at,reserved,charged,provider,model_id,route
+      FROM cloud_request WHERE user_id=${userId} AND client_key=${clientKey}`;
+    const retryable =
+      old?.state === "released" &&
+      old.dispatched_at === null &&
+      BigInt(old.reserved) === 0n &&
+      BigInt(old.charged) === 0n &&
+      old.provider === m.provider &&
+      old.model_id === m.id &&
+      old.route === route &&
+      ["credit_reservation_pending", "token_count_unavailable", "provider_rate_limited"].includes(
+        old.error_class,
+      );
+    if (old && !retryable)
       throw new AppError(
         liveStates.includes(old.state) ? "request_in_progress" : "request_already_recorded",
         409,
@@ -129,6 +141,15 @@ export async function openRequest(
     const id = crypto.randomUUID();
     const [clock] = await tx`SELECT clock_timestamp() AS db_now`;
     const lease = new Date(new Date(clock?.db_now).getTime() + requestDuration(p, m) + 5000);
+    if (retryable) {
+      // Keep the rejected receipt and give the next attempt a new request ID. Reusing
+      // an ID would let a delayed recovery task act on the newly admitted attempt.
+      const [residue] =
+        await tx`SELECT EXISTS(SELECT 1 FROM credit_allocation WHERE request_id=${old.id})
+        OR EXISTS(SELECT 1 FROM cloud_cost_record WHERE request_id=${old.id}) AS present`;
+      if (residue?.present) throw new AppError("request_already_recorded", 409);
+      await tx`UPDATE cloud_request SET client_key=${`${clientKey}:${old.id}`} WHERE id=${old.id}`;
+    }
     await tx`INSERT INTO cloud_request(id,user_id,session_id,client_key,provider,model_id,route,plan_id,policy_revision,price_snapshot,cost_rates,state,lease_until,hold_until)
       VALUES (${id},${userId},${sessionId},${clientKey},${m.provider},${m.id},${route},${context.plan.id},${p.revision},${JSON.stringify(m.rates)}::jsonb,${m.costRates ? JSON.stringify(m.costRates) : null}::jsonb,'preflight',${lease.toISOString()},${new Date(lease.getTime() + p.limits.unknownHoldSeconds * 1000).toISOString()})`;
     return { id, leaseUntil: lease, plan: context.plan.id };

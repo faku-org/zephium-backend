@@ -184,6 +184,38 @@ test("held credit returns retryable admission and becomes spendable after releas
   await expect(opened(ctx)).rejects.toMatchObject({ code: "insufficient_credits", status: 402 });
 });
 
+test("only confirmed zero-dispatch transient failures can retry the same logical key", async () => {
+  const ctx = await setup();
+  const key = crypto.randomUUID();
+  const first = await opened(ctx, key);
+  await releaseRequest(fixture.db, first.id, ctx.userId, "token_count_unavailable");
+  const attempts = await Promise.allSettled([opened(ctx, key), opened(ctx, key)]);
+  expect(attempts.map(codeOf).sort()).toEqual(["ok", "request_in_progress"]);
+  const next = attempts.find((x) => x.status === "fulfilled");
+  if (next?.status !== "fulfilled") throw new Error("Missing retry");
+  expect(next.value.id).not.toBe(first.id);
+  expect(await requestRow(first.id)).toMatchObject({
+    state: "released",
+    error_class: "token_count_unavailable",
+  });
+  await reserveRequest(
+    fixture.db,
+    ctx.policy,
+    ctx.model,
+    next.value.id,
+    ctx.userId,
+    ctx.sessionId,
+    10n,
+    1,
+  );
+  await markDispatched(fixture.db, next.value.id, ctx.userId, ctx.sessionId);
+  await releaseRequest(fixture.db, next.value.id, ctx.userId, "provider_rate_limited");
+  await expect(opened(ctx, key)).rejects.toMatchObject({
+    code: "request_already_recorded",
+    status: 409,
+  });
+});
+
 test("a duplicate client key cannot open a second dispatch", async () => {
   const ctx = await setup();
   const key = crypto.randomUUID();
