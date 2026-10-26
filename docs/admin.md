@@ -24,6 +24,8 @@ The origin checks the `Cf-Access-Jwt-Assertion` signature, RS256 algorithm, exac
 
 All routes, including HTML, assets, authentication and public readiness requests, pass this gate. Only `GET /health/ready` without query parameters from the actual loopback socket peer bypasses Access, so the internal container health check works. Forwarding headers cannot obtain that exemption. Use a separate staging Access application to verify genuine login and denial of direct-origin requests before enabling the production route. Keep the public route absent until the environment and operator are ready.
 
+If the reverse proxy uses Let's Encrypt HTTP-01 validation, Access must permit the exact `/.well-known/acme-challenge/*` path on each dashboard hostname. Create a separate, path-specific Access application with a Bypass policy for only those certificate paths; keep the owner-only policy on the dashboard application. A broader hostname bypass is unnecessary. This exception is needed for renewal as well as initial issuance. Verify a nonexistent HTTP challenge returns 404 without an Access redirect, while `/`, `/auth/` and `/api/` remain protected. Requests that reach the admin process still require a valid Access token, even under the challenge prefix. DNS-01 validation is an alternative when no public HTTP validation path is desired. Verify the origin's actual certificate with normal TLS validation before asking an operator to sign in; a Cloudflare login redirect alone does not prove the origin certificate is valid.
+
 Reference: [Cloudflare application-token validation](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/).
 
 ## Apply only the admin schema and roles
