@@ -220,3 +220,47 @@ test("password hashing admission remains held until the library operation resolv
     app.auth.handler = original;
   }
 });
+
+test("enabled Access protects login, assets, reports and external health before database authentication", async () => {
+  const gatedConfig = readAdminConfig({
+    ...Object.fromEntries(Object.entries(config).map(([key, value]) => [key, String(value)])),
+    ADMIN_ACCESS_MODE: "cloudflare",
+    ADMIN_ACCESS_ISSUER: "https://zephium-test.cloudflareaccess.com",
+    ADMIN_ACCESS_AUDIENCE: "a".repeat(64),
+    ADMIN_ACCESS_EMAILS: email,
+  });
+  const build = (peer: string) =>
+    createAdminApp(
+      gatedConfig,
+      db,
+      reports,
+      { html: "private login", client: "", css: "" },
+      () => peer,
+    );
+  const external = build("10.0.2.2");
+  for (const path of [
+    "/",
+    "/assets/client.js",
+    "/api/overview",
+    "/auth/get-session",
+    "/health/ready",
+  ]) {
+    const response = await external.fetch(
+      new Request(origin + path, {
+        headers: {
+          ...headers(),
+          "x-forwarded-for": "127.0.0.1",
+          "cf-connecting-ip": "127.0.0.1",
+          "cf-access-authenticated-user-email": email,
+        },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect((await response.json()).error.code).toBe("admin_access_required");
+  }
+  const local = build("127.0.0.1");
+  expect((await local.fetch(new Request(`${origin}/health/ready`))).status).toBe(200);
+  expect((await local.fetch(new Request(`${origin}/health/ready?extra=1`))).status).toBe(403);
+  expect((await local.fetch(new Request(`${origin}/api/overview`))).status).toBe(403);
+});

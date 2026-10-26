@@ -11,6 +11,10 @@ services:
     expose: ["3001"]
     environment:
       ADMIN_PORT: "3001"
+      ADMIN_ACCESS_MODE: ${ADMIN_ACCESS_MODE:-off}
+      ADMIN_ACCESS_ISSUER: ${ADMIN_ACCESS_ISSUER:-}
+      ADMIN_ACCESS_AUDIENCE: ${ADMIN_ACCESS_AUDIENCE:-}
+      ADMIN_ACCESS_EMAILS: ${ADMIN_ACCESS_EMAILS:-}
       ADMIN_ORIGIN: ${ADMIN_ORIGIN:?Set the separate exact HTTPS admin origin}
       ADMIN_AUTH_SECRET: ${ADMIN_AUTH_SECRET:?Set an independent admin secret of at least 48 characters}
       ADMIN_AUTH_DATABASE_URL: ${ADMIN_AUTH_DATABASE_URL:?Set the restricted admin authentication role URL}

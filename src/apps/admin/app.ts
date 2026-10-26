@@ -2,6 +2,7 @@ import type postgres from "postgres";
 import {
   ADMIN_AUTH_ROUTES,
   type AdminAuthDatabase,
+  createAdminAccess,
   createAdminAuth,
   createAdminReports,
   getAdminSession,
@@ -22,6 +23,7 @@ export function createAdminApp(
   assets: AdminAssets,
   peerAddress: (r: Request) => string,
 ) {
+  const verifyAccess = createAdminAccess(config);
   const auth = createAdminAuth(config, db);
   const reports = createAdminReports(reportsSql);
   const origin = new URL(config.ADMIN_ORIGIN);
@@ -66,6 +68,12 @@ export function createAdminApp(
       site !== "none"
     )
       throw new AppError("forbidden", 403);
+    const internalHealth =
+      request.method === "GET" &&
+      url.pathname === "/health/ready" &&
+      !url.search &&
+      ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(peerAddress(request));
+    if (!internalHealth) await verifyAccess(request);
     if (request.method === "GET" && !url.search) {
       if (url.pathname === "/")
         return new Response(assets.html, {

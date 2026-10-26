@@ -1,3 +1,4 @@
+export { createAdminAccess } from "./access";
 export type { AdminAuthDatabase } from "./auth";
 export { createAdminAuth } from "./auth";
 export { ADMIN_AUTH_ROUTES, getAdminSession, handleAdminAuth } from "./authorization";
