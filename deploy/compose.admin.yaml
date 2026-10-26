@@ -17,7 +17,11 @@ services:
       ADMIN_READ_DATABASE_URL: ${ADMIN_READ_DATABASE_URL:?Set the separate SELECT-only reporting role URL}
       ADMIN_TRUSTED_PROXY_CIDRS: ${ADMIN_TRUSTED_PROXY_CIDRS:-}
       ADMIN_TRUSTED_CLOUDFLARE_CIDRS: ${ADMIN_TRUSTED_CLOUDFLARE_CIDRS:-}
-    networks: [database, proxy]
+    networks:
+      database: {}
+      proxy:
+        aliases:
+          - ${ADMIN_PROXY_ALIAS:?Set a unique stable alias on the proxy network}
     mem_limit: 256m
     cpus: 0.5
     pids_limit: 64
