@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "../../scripts/migrate";
@@ -365,4 +365,27 @@ test("free concurrency headroom leaves an admission slot for paid accounts", asy
   await fixture.db
     .sql`UPDATE billing_customer SET status='active',product_id=${productId},paid_until=clock_timestamp()+interval '1 day',reconciled_at=clock_timestamp() WHERE user_id=${b.userId}`;
   expect((await open(b)).plan).toBe("pro");
+});
+
+test("failed PostgreSQL fixture startup reports a port conflict and removes temporary files", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pg-repro-"));
+  const originalTmpdir = process.env.TMPDIR;
+  const originalRandom = Math.random;
+  const occupiedPort = Number(new URL(fixture.config.DATABASE_URL).port);
+  try {
+    process.env.TMPDIR = directory;
+    // Exercise the existing random-port branch deterministically; do not change allocation.
+    Math.random = () => (occupiedPort - 20000 + 0.25) / 20000;
+    await expect(testDatabase()).rejects.toThrow(
+      "PostgreSQL test fixture startup failed (address_in_use)",
+    );
+    expect(await readdir(directory)).toEqual([]);
+    const [row] = await fixture.db.sql`SELECT 1 AS alive`;
+    expect(row?.alive).toBe(1);
+  } finally {
+    Math.random = originalRandom;
+    if (originalTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = originalTmpdir;
+    await rm(directory, { recursive: true, force: true });
+  }
 });
