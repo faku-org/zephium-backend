@@ -370,22 +370,34 @@ test("free concurrency headroom leaves an admission slot for paid accounts", asy
 test("failed PostgreSQL fixture startup reports a port conflict and removes temporary files", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pg-repro-"));
   const originalTmpdir = process.env.TMPDIR;
-  const originalRandom = Math.random;
   const occupiedPort = Number(new URL(fixture.config.DATABASE_URL).port);
   try {
     process.env.TMPDIR = directory;
-    // Exercise the existing random-port branch deterministically; do not change allocation.
-    Math.random = () => (occupiedPort - 20000 + 0.25) / 20000;
-    await expect(testDatabase()).rejects.toThrow(
+    await expect(testDatabase({ port: occupiedPort })).rejects.toThrow(
       "PostgreSQL test fixture startup failed (address_in_use)",
     );
     expect(await readdir(directory)).toEqual([]);
     const [row] = await fixture.db.sql`SELECT 1 AS alive`;
     expect(row?.alive).toBe(1);
   } finally {
-    Math.random = originalRandom;
     if (originalTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = originalTmpdir;
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("concurrent PostgreSQL fixtures obtain distinct OS-selected ports without disturbing existing fixtures", async () => {
+  const results = await Promise.allSettled([testDatabase(), testDatabase(), testDatabase()]);
+  const opened = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+  try {
+    expect(opened).toHaveLength(3);
+    const ports = [fixture, ...opened].map((entry) => new URL(entry.config.DATABASE_URL).port);
+    expect(new Set(ports).size).toBe(4);
+    for (const entry of [fixture, ...opened]) {
+      const [row] = await entry.db.sql`SELECT 1 AS alive`;
+      expect(row?.alive).toBe(1);
+    }
+  } finally {
+    await Promise.all(opened.map((entry) => entry.close()));
   }
 });
