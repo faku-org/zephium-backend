@@ -396,6 +396,29 @@ test("native OpenAI transport rebuilds multipart using upstream model and normal
   }
 });
 
+test("STT origin replaces api.openai.com for audio only, with its own bearer key", async () => {
+  const seen: Request[] = [];
+  const fake = (async (url: string | URL | Request, init?: RequestInit) => {
+    seen.push(new Request(url, init));
+    return success();
+  }) as unknown as Parameters<typeof nativeTransport>[1];
+  const native = nativeTransport({}, fake, { origin: "http://127.0.0.1:8894/", key: "stt-key" });
+  expect(native.available("openai")).toBe(false);
+  expect(native.transcribeAvailable?.()).toBe(true);
+  if (!native.transcribe) throw new Error("Missing native audio adapter");
+  await native.transcribe(
+    audioModel,
+    { file: new Blob([new Uint8Array(wav())], { type: "audio/wav" }), milliseconds: 1000 },
+    new AbortController().signal,
+  );
+  const [request] = seen;
+  if (!request) throw new Error("No upstream request");
+  expect(request.url).toBe("http://127.0.0.1:8894/v1/audio/transcriptions");
+  expect(request.headers.get("authorization")).toBe("Bearer stt-key");
+  expect((await request.formData()).get("model")).toBe(audioModel.upstreamModel);
+  expect(nativeTransport({}).transcribeAvailable?.()).toBe(false);
+});
+
 test("slow uploads, stalled provider bodies and client cancellation release readers without invented charges", async () => {
   let uploadCancelled = false;
   const upload = new Request(`http://localhost${audioRoute}`, {

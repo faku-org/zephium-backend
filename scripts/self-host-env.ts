@@ -45,6 +45,8 @@ const lines = [
   "CLOUD_OPENROUTER_KEY=",
   "CLOUD_DEEPSEEK_KEY=",
   "CLOUD_TYPESAFE_KEY=",
+  "STT_ORIGIN=",
+  "STT_KEY=",
 ];
 const handle = await open(file, "wx", 0o600);
 try {
