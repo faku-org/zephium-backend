@@ -14,17 +14,24 @@ if (config.DEPLOYMENT_MODE === "hosted" && policy.selfHostedPlan)
   throw new Error("Hosted deployment cannot select a self-hosted plan");
 await assertActivePolicy(db, policy);
 await assertGrantEligibilityReady(db);
-const transport = nativeTransport({
-  openai: config.CLOUD_OPENAI_KEY,
-  anthropic: config.CLOUD_ANTHROPIC_KEY,
-  google: config.CLOUD_GOOGLE_KEY,
-  openrouter: config.CLOUD_OPENROUTER_KEY,
-  deepseek: config.CLOUD_DEEPSEEK_KEY,
-  typesafe: config.CLOUD_TYPESAFE_KEY,
-});
+const transport = nativeTransport(
+  {
+    openai: config.CLOUD_OPENAI_KEY,
+    anthropic: config.CLOUD_ANTHROPIC_KEY,
+    google: config.CLOUD_GOOGLE_KEY,
+    openrouter: config.CLOUD_OPENROUTER_KEY,
+    deepseek: config.CLOUD_DEEPSEEK_KEY,
+    typesafe: config.CLOUD_TYPESAFE_KEY,
+  },
+  fetch,
+  config.STT_ORIGIN ? { origin: config.STT_ORIGIN, key: config.STT_KEY } : undefined,
+);
 if (policy.enabled)
   for (const model of policy.models.filter((m) => m.enabled))
-    if (!transport.available(model.provider))
+    if (
+      !transport.available(model.provider) &&
+      !(model.roles.every((role) => role === "transcribe") && transport.transcribeAvailable?.())
+    )
       throw new Error(`Cloud provider key missing: ${model.provider}`);
 const mailer = resendMailer(config);
 const cloud = createCloudService(db, policy, transport, config.ABUSE_SECRET);

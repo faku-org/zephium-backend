@@ -61,6 +61,9 @@ const schema = z.object({
   CLOUD_OPENROUTER_KEY: optionalSecret,
   CLOUD_DEEPSEEK_KEY: optionalSecret,
   CLOUD_TYPESAFE_KEY: optionalSecret,
+  // Optional OpenAI-compatible transcription server (self-host); replaces api.openai.com for audio only.
+  STT_ORIGIN: z.url().optional(),
+  STT_KEY: optionalSecret,
 });
 export type Config = z.infer<typeof schema>;
 const workerSchema = schema.pick({

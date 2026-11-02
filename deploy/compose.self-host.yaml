@@ -112,6 +112,8 @@ services:
       CLOUD_OPENROUTER_KEY: ${CLOUD_OPENROUTER_KEY:-}
       CLOUD_DEEPSEEK_KEY: ${CLOUD_DEEPSEEK_KEY:-}
       CLOUD_TYPESAFE_KEY: ${CLOUD_TYPESAFE_KEY:-}
+      STT_ORIGIN: ${STT_ORIGIN:-}
+      STT_KEY: ${STT_KEY:-}
     volumes:
       - type: bind
         source: ${ZEPHIUM_POLICY_FILE:?Set an absolute path to the reviewed self-host policy}

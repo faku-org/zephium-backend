@@ -4,6 +4,8 @@ import type { PreparedAudio } from "./audio";
 import type { PreparedRequest } from "./protocol";
 export interface CloudTransport {
   available(provider: ProviderName): boolean;
+  /** True when transcription can run: a dedicated STT origin, or the OpenAI key. */
+  transcribeAvailable?(): boolean;
   count(model: Model, request: PreparedRequest, signal: AbortSignal): Promise<number>;
   transcribe?(model: Model, request: PreparedAudio, signal: AbortSignal): Promise<Response>;
   generate(model: Model, request: PreparedRequest, signal: AbortSignal): Promise<Response>;
@@ -57,9 +59,16 @@ export async function boundedJSON(
 }
 export type FetchRequest = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+/** Operator-run OpenAI-compatible transcription server used instead of api.openai.com. */
+export interface SpeechToText {
+  origin: string;
+  key?: string;
+}
+
 export function nativeTransport(
   keys: Partial<Record<ProviderName, string>>,
   fetcher: FetchRequest = fetch,
+  stt?: SpeechToText,
 ): CloudTransport {
   const headers = (provider: ProviderName) => {
     const key = keys[provider];
@@ -82,6 +91,7 @@ export function nativeTransport(
     });
   return {
     available: (provider) => !!keys[provider],
+    transcribeAvailable: () => !!stt || !!keys.openai,
     async count(m, r, signal) {
       let response: Response;
       if (m.provider === "openai") {
@@ -156,15 +166,19 @@ export function nativeTransport(
       body.set("file", r.file, "audio.wav");
       body.set("response_format", "json");
       if (r.language) body.set("language", r.language);
-      const h = headers(m.provider);
+      const h = stt ? new Headers() : headers(m.provider);
+      if (stt?.key) h.set("Authorization", `Bearer ${stt.key}`);
       h.delete("Content-Type"); // Fetch supplies the boundary for this new, normalized multipart body.
-      return fetcher(`${origins.openai}/v1/audio/transcriptions`, {
-        method: "POST",
-        headers: h,
-        body,
-        redirect: "error",
-        signal,
-      });
+      return fetcher(
+        `${stt ? stt.origin.replace(/\/+$/, "") : origins.openai}/v1/audio/transcriptions`,
+        {
+          method: "POST",
+          headers: h,
+          body,
+          redirect: "error",
+          signal,
+        },
+      );
     },
     generate(m, r, signal) {
       const paths: Record<ProviderName, string> = {

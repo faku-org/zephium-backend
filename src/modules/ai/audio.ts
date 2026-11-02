@@ -251,7 +251,10 @@ export function createAudioTranscriber(
       timer = timeout(duration);
       if (performance.now() - start >= duration) interrupt("provider_timeout");
       check();
-      if (!transport.available("openai") || !transport.transcribe)
+      if (
+        !(transport.transcribeAvailable?.() ?? transport.available("openai")) ||
+        !transport.transcribe
+      )
         throw new AppError("provider_not_configured", 503);
       const key = createHash("sha256")
         .update(`${identity.userId}:${rawKey.toLowerCase()}`)
